@@ -134,7 +134,7 @@ module IDstate(
     wire raw_exe_id, raw_mem_id, raw_wb_id, raw_exe_ldw;
     wire raw_exe_r1, raw_exe_r2, raw_mem_r1, raw_mem_r2, raw_wb_r1, raw_wb_r2;
     
-    assign need_raddr1 = ~inst_lu12i_w;
+    assign need_raddr1 = ~(inst_lu12i_w | inst_b | inst_bl);
     assign need_raddr2 = ~(inst_slli_w | inst_srli_w | inst_srai_w | inst_addi_w | inst_ld_w | inst_jirl | inst_b | inst_bl | inst_lu12i_w);
     // assign raw_exe_id  = exe_valid & exe_rf_we & ((need_raddr1 & (|rf_raddr1) & exe_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & exe_rf_waddr == rf_raddr2));
     // assign raw_mem_id  = mem_valid & mem_rf_we & ((need_raddr1 & (|rf_raddr1) & mem_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & mem_rf_waddr == rf_raddr2));
@@ -153,7 +153,7 @@ module IDstate(
 
     // assign id_ready_go = ~raw_exe_id & ~raw_mem_id & ~raw_wb_id;
     assign id_ready_go = ~raw_exe_ldw;
-    assign id_allowin  = ~id_valid & id_ready_go | id_ready_go & exe_allowin;
+    assign id_allowin  = ~id_valid | id_ready_go & exe_allowin;
     assign id_to_exe_valid = id_valid & id_ready_go;
 
     always @(posedge clk) begin
@@ -175,11 +175,6 @@ module IDstate(
         if(if_to_id_valid & id_allowin) begin
             inst  <= if_inst;
         end
-    end
-
-    reg raw_wb_id_reg;
-    always @(posedge clk) begin
-        raw_wb_id_reg <= raw_wb_id;
     end
 
     assign rj_eq_rd = (rj_value == rkd_value);

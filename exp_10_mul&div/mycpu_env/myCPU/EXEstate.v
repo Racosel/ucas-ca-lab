@@ -1,79 +1,79 @@
-module MEMstate(
+module EXEstate(
     input              clk,
     input              resetn,
-    output reg         mem_valid,
-    // exestate -> memstate
-    output             mem_allowin,
-    input       [5 :0] exe_rf_all, // {exe_rf_we, exe_rf_waddr}
-    input              exe_to_mem_valid,
-    input       [31:0] exe_pc,    
-    input       [31:0] exe_alu_result, 
-    input              exe_res_from_mem, 
-    input              exe_mem_we,
-    input       [31:0] exe_rkd_value,
-    // memstate -> wbstate
-    input              wb_allowin,
-    output      [37:0] mem_rf_all, // {mem_rf_we, mem_rf_waddr, mem_rf_wdata}
-    output             mem_to_wb_valid,
-    output reg  [31:0] mem_pc,
-    // data sram
-    output             data_sram_en,
-    output      [ 3:0] data_sram_we,
-    output      [31:0] data_sram_addr,
-    output      [31:0] data_sram_wdata,
-    input       [31:0] data_sram_rdata
-    // memstate forwarding
-);
-    wire        mem_ready_go;
-    wire [31:0] mem_result;
-    // reg         mem_valid;
-    reg         mem_we;
-    reg  [31:0] rkd_value;
-    wire [31:0] mem_rf_wdata;
-    reg         mem_rf_we;
-    reg  [4 :0] mem_rf_waddr;
-    reg  [31:0] alu_result;
-    reg         mem_res_from_mem;
-
-    // valid signals
-    assign mem_ready_go     = 1'b1;
-    assign mem_allowin      = ~mem_valid | mem_ready_go & wb_allowin;     
-    assign mem_to_wb_valid  = mem_valid & mem_ready_go;
-    assign mem_rf_wdata     = mem_res_from_mem ? mem_result : alu_result;
-    assign mem_rf_all       = {mem_rf_we, mem_rf_waddr, mem_rf_wdata};
-    always @(posedge clk) begin
-        if(~resetn)
-            mem_valid <= 1'b0;
-        else
-            mem_valid <= exe_to_mem_valid & mem_allowin; 
-    end
-
+    output reg         exe_valid,
+    // idstate <-> exestate
+    output             exe_allowin,
+    input       [5 :0] id_rf_all, // {id_rf_we, id_rf_waddr}
+    input              id_to_exe_valid,
+    input       [31:0] id_pc,    
+    input       [75:0] id_alu_data_all, // {exe_alu_op, exe_alu_src1, exe_alu_src2}
+    input              id_res_from_mem, 
+    input              id_mem_we,
+    input       [31:0] id_rkd_value,
     // exestate <-> memstate
+    input              mem_allowin,
+    // output reg  [5 :0] exe_rf_all,  // {exe_rf_we, exe_rf_waddr}
+    output      [38:0] exe_fwd_all, // {exe_res_from_mem, exe_rf_we, exe_rf_waddr, exe_alu_result}
+    output             exe_to_mem_valid,
+    output reg  [31:0] exe_pc,
+    output      [31:0] exe_alu_result,
+    output reg         exe_res_from_mem,
+    output reg         exe_mem_we,
+    output reg  [31:0] exe_rkd_value
+);
+
+    wire        exe_ready_go;
+    // reg         exe_valid;
+
+    reg  [11:0] exe_alu_op;
+    reg  [31:0] exe_alu_src1;
+    reg  [31:0] exe_alu_src2;
+    reg  [5 :0] exe_rf_all;
+
+
+    /* valid signals */
+    assign exe_ready_go      = 1'b1;
+    assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin;     
+    assign exe_to_mem_valid  = exe_valid & exe_ready_go;
     always @(posedge clk) begin
-        if(exe_to_mem_valid & mem_allowin)
-            mem_pc <= exe_pc;
+        if(~resetn)
+            exe_valid <= 1'b0;
+        else
+            exe_valid <= id_to_exe_valid & exe_allowin; 
+    end
+
+    /* idstate <-> exestate */
+    always @(posedge clk) begin
+        if(id_to_exe_valid & exe_allowin)
+            exe_pc <= id_pc;
     end
     always @(posedge clk) begin
-        if(exe_to_mem_valid & mem_allowin)
-            alu_result <= exe_alu_result;
+        if(id_to_exe_valid & exe_allowin)
+            {exe_alu_op, exe_alu_src1, exe_alu_src2} <= id_alu_data_all;
+    end
+    always @(posedge clk) begin
+        if(id_to_exe_valid & exe_allowin)
+            {exe_res_from_mem, exe_mem_we, exe_rkd_value} <= {id_res_from_mem, id_mem_we, id_rkd_value};
     end
     always @(posedge clk) begin
         if(~resetn)
-            {mem_rf_we, mem_rf_waddr} <= 6'd0;
-        else if(exe_to_mem_valid & mem_allowin)
-            {mem_rf_we, mem_rf_waddr} <= exe_rf_all;
-    end
-    always @(posedge clk) begin
-        if(exe_to_mem_valid & mem_allowin)
-            {mem_res_from_mem, mem_we, rkd_value} <= {exe_res_from_mem, exe_mem_we, exe_rkd_value};
+            exe_rf_all <= 6'd0;
+        else if(id_to_exe_valid & exe_allowin)
+            exe_rf_all <= id_rf_all;
     end
 
-    /* sram instantiation */
-    assign data_sram_en    = exe_res_from_mem || exe_mem_we;
-    assign data_sram_we    = {4{exe_mem_we}};
-    assign data_sram_addr  = exe_alu_result;
-    assign data_sram_wdata = exe_rkd_value;
+    assign exe_fwd_all = {exe_res_from_mem, exe_rf_all, exe_alu_result};
 
-    assign mem_result      = data_sram_rdata;
+    /* alu instantiation */        
+    alu u_alu(
+        .alu_op     (exe_alu_op    ),
+        .alu_src1   (exe_alu_src1  ),
+        .alu_src2   (exe_alu_src2  ),
+        .alu_result (exe_alu_result)
+    );
+
+    /* exe forwarding */
+    assign exe_fwd_all = {exe_res_from_mem, exe_rf_all, exe_alu_result};
 
 endmodule
