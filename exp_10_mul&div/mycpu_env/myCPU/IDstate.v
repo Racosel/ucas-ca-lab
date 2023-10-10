@@ -19,7 +19,7 @@ module IDstate(
     output     [80:0] id_alu_data_all, 
     // {calc_h,calc_u,alu_op[14:0] revised in exp10, alu_src1[31:0], alu_src2[31:0]}
     output            id_res_from_mem, // res_from_mem
-    output            id_mem_we,// should be revised in exp11 for st.h/b
+    output      [7:0] id_mem_all,// should be revised in exp11 for st.h/b
     output     [31:0] id_rkd_value,
     // idstate <-> wbstate
     // input      [5 :0] exe_rf_all, // {exe_rf_we, exe_rf_waddr}
@@ -36,6 +36,13 @@ module IDstate(
     // reg         id_valid;
     reg  [31:0] inst;
 
+    wire        ld_ue;//load should be unsigned extended
+    wire        ld_w;
+    wire        ld_h;
+    wire        ld_b;
+    wire        st_w;
+    wire        st_h;
+    wire        st_b;
     wire        calc_h;//the calculation should be done in unsigned
     wire        calc_u;//use the high part of mul or high part of div(part of mod)
     wire [14:0] alu_op;//extended in exp10
@@ -163,7 +170,7 @@ module IDstate(
     assign {wb_rf_we, wb_rf_waddr, wb_rf_wdata}                        = wb_fwd_all;
 
     // valid signals
-    
+
 
     wire need_raddr1, need_raddr2;
     // wire raw_exe_id, raw_mem_id, raw_wb_id;
@@ -192,8 +199,16 @@ module IDstate(
     assign id_ready_go = ~raw_exe_ldw;
     assign id_allowin  = ~id_valid & id_ready_go | id_ready_go & exe_allowin;
     assign id_to_exe_valid = id_valid & id_ready_go;
+    assign ld_b   = inst_ld_b | inst_ld_bu;
+    assign ld_h   = inst_ld_h | inst_ld_hu;
+    assign ld_w   = inst_ld_w;
+    assign ld_ue  = inst_ld_bu | inst_ld_hu;
+    assign st_b   = inst_st_b;
+    assign st_h   = inst_st_h;
+    assign st_w   = inst_st_w;
     assign calc_h = inst_mulh_w | inst_mulh_wu | inst_mod_w | inst_mod_wu;
     assign calc_u = inst_mulh_wu | inst_mod_wu | inst_div_wu;
+
 
     always @(posedge clk) begin
         if(~resetn)
@@ -408,7 +423,7 @@ module IDstate(
                      : rf_rdata2;
 
     assign id_alu_data_all = {calc_h, calc_u, alu_op, alu_src1, alu_src2};
-    assign id_mem_we = mem_we;
+    assign id_mem_all = {mem_we, ld_b, ld_h, ld_w, ld_ue, st_b, st_h, st_w};
     assign id_rkd_value = rkd_value;
     assign id_res_from_mem = res_from_mem;
 
