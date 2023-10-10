@@ -16,9 +16,10 @@ module IDstate(
     input             exe_allowin,
     output     [5 :0] id_rf_all, // {id_rf_we, id_rf_waddr[4:0]}
     output            id_to_exe_valid,   
-    output     [78:0] id_alu_data_all, // {alu_op[14:0], alu_src1[31:0], alu_src2[31:0]}
+    output     [80:0] id_alu_data_all, 
+    // {calc_h,calc_u,alu_op[14:0] revised in exp10, alu_src1[31:0], alu_src2[31:0]}
     output            id_res_from_mem, // res_from_mem
-    output            id_mem_we,
+    output            id_mem_we,// should be revised in exp11 for st.h/b
     output     [31:0] id_rkd_value,
     // idstate <-> wbstate
     // input      [5 :0] exe_rf_all, // {exe_rf_we, exe_rf_waddr}
@@ -35,8 +36,9 @@ module IDstate(
     // reg         id_valid;
     reg  [31:0] inst;
 
-
-    wire [14:0] alu_op;
+    wire        calc_h;//the calculation should be done in unsigned
+    wire        calc_u;//use the high part of mul or high part of div(part of mod)
+    wire [14:0] alu_op;//extended in exp10
     wire [31:0] alu_src1;
     wire [31:0] alu_src2;
     wire        src1_is_pc;
@@ -161,9 +163,11 @@ module IDstate(
     assign {wb_rf_we, wb_rf_waddr, wb_rf_wdata}                        = wb_fwd_all;
 
     // valid signals
+    
 
     wire need_raddr1, need_raddr2;
-    wire raw_exe_id, raw_mem_id, raw_wb_id, raw_exe_ldw;
+    // wire raw_exe_id, raw_mem_id, raw_wb_id;
+    wire raw_exe_ldw;
     wire raw_exe_r1, raw_exe_r2, raw_mem_r1, raw_mem_r2, raw_wb_r1, raw_wb_r2;
     
     assign need_raddr1 = ~(inst_lu12i_w | inst_bl | inst_b);
@@ -188,6 +192,8 @@ module IDstate(
     assign id_ready_go = ~raw_exe_ldw;
     assign id_allowin  = ~id_valid & id_ready_go | id_ready_go & exe_allowin;
     assign id_to_exe_valid = id_valid & id_ready_go;
+    assign calc_h = inst_mulh_w | inst_mulh_wu | inst_mod_w | inst_mod_wu;
+    assign calc_u = inst_mulh_wu | inst_mod_wu | inst_div_wu;
 
     always @(posedge clk) begin
         if(~resetn)
@@ -210,10 +216,10 @@ module IDstate(
         end
     end
 
-    reg raw_wb_id_reg;
-    always @(posedge clk) begin
-        raw_wb_id_reg <= raw_wb_id;
-    end
+    // reg raw_wb_id_reg;
+    // always @(posedge clk) begin
+    //     raw_wb_id_reg <= raw_wb_id;
+    // end
 
     assign rj_eq_rd = (rj_value == rkd_value);
     assign br_taken = (inst_beq  &&  rj_eq_rd
@@ -401,7 +407,7 @@ module IDstate(
                      : raw_wb_r2  ? wb_rf_wdata
                      : rf_rdata2;
 
-    assign id_alu_data_all = {alu_op, alu_src1, alu_src2};
+    assign id_alu_data_all = {calc_h, calc_u, alu_op, alu_src1, alu_src2};
     assign id_mem_we = mem_we;
     assign id_rkd_value = rkd_value;
     assign id_res_from_mem = res_from_mem;

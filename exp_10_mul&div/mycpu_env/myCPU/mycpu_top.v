@@ -54,7 +54,7 @@ module mycpu_top(
     wire [31:0] br_target;
     // wire [31:0] id_to_if_pc_next;
     wire [31:0] if_inst;
-    wire [75:0] id_alu_data_all;
+    wire [80:0] id_alu_data_all;
     wire [31:0] exe_alu_result;
 
     wire if_valid, id_valid, exe_valid, mem_valid, wb_valid;
@@ -109,6 +109,7 @@ module mycpu_top(
         .mem_valid(mem_valid),
         .wb_valid(wb_valid)
     );
+
 
     EXEstate exestate(
         .clk(clk),
