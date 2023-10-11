@@ -126,14 +126,14 @@ module IDstate(
     wire        inst_jirl;
     wire        inst_b;
     wire        inst_bl;
-    // wire        inst_blt;
-    // wire        inst_bge;
-    // wire        inst_bltu;
-    // wire        inst_bgeu;
-    // wire        inst_beq;
-    // wire        inst_bne;
+    wire        inst_blt;
+    wire        inst_bge;
+    wire        inst_bltu;
+    wire        inst_bgeu;
+    wire        inst_beq;
+    wire        inst_bne;
 
-    // wire        inst_pcaddu12i;
+    wire        inst_pcaddu12i;
     wire        inst_lu12i_w;
 
     wire        need_ui5;
@@ -179,7 +179,7 @@ module IDstate(
     wire raw_exe_r1, raw_exe_r2, raw_mem_r1, raw_mem_r2, raw_wb_r1, raw_wb_r2;
     
     assign need_raddr1 = ~(inst_lu12i_w | inst_bl | inst_b);
-    assign need_raddr2 = ~(need_raddr1 | inst_addi_w | inst_ld_w | inst_jirl | inst_slli_w | inst_srai_w 
+    assign need_raddr2 = need_raddr1 & ~(inst_addi_w | inst_ld_w | inst_jirl | inst_slli_w | inst_srai_w 
                            | inst_srli_w | inst_slti | inst_sltui | inst_andi | inst_ori | inst_xori);
     // assign raw_exe_id  = exe_valid & exe_rf_we & ((need_raddr1 & (|rf_raddr1) & exe_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & exe_rf_waddr == rf_raddr2));
     // assign raw_mem_id  = mem_valid & mem_rf_we & ((need_raddr1 & (|rf_raddr1) & mem_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & mem_rf_waddr == rf_raddr2));
@@ -243,7 +243,7 @@ module IDstate(
                     || inst_jirl
                     || inst_bl
                     || inst_b
-                    ) && id_valid && raw_exe_ldw;
+                    ) && id_valid && ~raw_exe_ldw;
     // (id_valid | raw_exe_id | raw_mem_id | raw_wb_id | raw_wb_id_reg)
     assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (id_pc + br_offs) :
                                                     /*inst_jirl*/ (rj_value + jirl_offs);
@@ -291,7 +291,7 @@ module IDstate(
     assign inst_sll_w     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h0e];
     assign inst_srl_w     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h0f];
     assign inst_sra_w     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h10];
-    assign inst_pcaddu12i = op_31_26_d[6'h06] & inst[25];
+    assign inst_pcaddu12i = op_31_26_d[6'h07] & ~inst[25];
 
     assign inst_mul_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h18];
     assign inst_mulh_w  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h19];
@@ -336,14 +336,14 @@ module IDstate(
     assign alu_op[ 7] = inst_xor | inst_xori;
     assign alu_op[ 8] = inst_slli_w | inst_sll_w;
     assign alu_op[ 9] = inst_srli_w | inst_srl_w;
-    assign alu_op[10] = inst_srai_w | inst_srai_w;
+    assign alu_op[10] = inst_srai_w | inst_sra_w;
     assign alu_op[11] = inst_lu12i_w;
     assign alu_op[12] = inst_mul_w | inst_mulh_w | inst_mulh_wu;
     assign alu_op[13] = inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;;//mod uses the same op as div and
 
     assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
-    assign need_ui12  =  inst_andi | inst_ori | inst_andi | inst_xori | inst_sltui | inst_bltu | inst_bgeu;
-    assign need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti | inst_blt | inst_bge;
+    assign need_ui12  =  inst_andi | inst_ori | inst_andi | inst_xori;
+    assign need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti| inst_sltui ;
     assign need_si16  =  inst_jirl | inst_beq | inst_bne;
     assign need_si20  =  inst_lu12i_w | inst_pcaddu12i;
     assign need_si26  =  inst_b | inst_bl;
@@ -390,7 +390,7 @@ module IDstate(
     assign res_from_mem = inst_ld_w | inst_ld_b | inst_ld_bu | inst_ld_h | inst_ld_hu;
     assign dst_is_r1    = inst_bl;
     assign gr_we        = ~inst_beq & ~inst_bne & ~inst_b & ~inst_st_w & ~inst_blt & ~inst_bltu & ~inst_bge & ~inst_bgeu;// serve as rf_we
-    // assign mem_we       = inst_st_w;   
+    assign mem_we       = inst_st_w | inst_st_b | inst_st_h;   
     assign dest         = dst_is_r1 ? 5'd1 : rd;
 
     /* regfile read */
@@ -422,7 +422,7 @@ module IDstate(
                      : raw_wb_r2  ? wb_rf_wdata
                      : rf_rdata2;
 
-    assign id_alu_data_all = {calc_h, calc_u, alu_op, alu_src1, alu_src2};
+    assign id_alu_data_all = {calc_h, calc_s, alu_op, alu_src1, alu_src2};
     assign id_mem_all = {mem_we, ld_b, ld_h, ld_w, ld_ue, st_b, st_h, st_w};
     assign id_rkd_value = rkd_value;
     assign id_res_from_mem = res_from_mem;

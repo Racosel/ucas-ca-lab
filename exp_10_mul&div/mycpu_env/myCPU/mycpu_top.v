@@ -43,7 +43,7 @@ module mycpu_top(
     wire        id_res_from_mem;
     wire        exe_res_from_mem;
 
-    wire        id_mem_all;
+    wire [7:0] id_mem_all;
     wire        exe_mem_we;
     
     wire [31:0] id_rkd_value;
@@ -55,7 +55,7 @@ module mycpu_top(
     // wire [31:0] id_to_if_pc_next;
     wire [31:0] if_inst;
     wire [80:0] id_alu_data_all;
-    wire [31:0] exe_alu_result;
+    wire [31:0] exe_result;
 
     wire if_valid, id_valid, exe_valid, mem_valid, wb_valid;
 
@@ -129,7 +129,7 @@ module mycpu_top(
         .exe_fwd_all(exe_fwd_all),
         .exe_to_mem_valid(exe_to_mem_valid),
         .exe_pc(exe_pc),
-        .exe_alu_result(exe_alu_result),
+        .exe_result(exe_result),
         .exe_res_from_mem(exe_res_from_mem),
         .exe_mem_we(exe_mem_we),
         .exe_rkd_value(exe_rkd_value)
@@ -144,7 +144,7 @@ module mycpu_top(
         .exe_rf_all(exe_fwd_all[37:32]),
         .exe_to_mem_valid(exe_to_mem_valid),
         .exe_pc(exe_pc),
-        .exe_alu_result(exe_alu_result),
+        .exe_result(exe_result),
         .exe_res_from_mem(exe_res_from_mem),
         .exe_mem_we(exe_mem_we),
         .exe_rkd_value(exe_rkd_value),

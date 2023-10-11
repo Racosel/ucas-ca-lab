@@ -7,7 +7,7 @@ module MEMstate(
     input       [5 :0] exe_rf_all, // {exe_rf_we, exe_rf_waddr}
     input              exe_to_mem_valid,
     input       [31:0] exe_pc,    
-    input       [31:0] exe_alu_result, 
+    input       [31:0] exe_result, 
     input              exe_res_from_mem, 
     input              exe_mem_we,
     input       [31:0] exe_rkd_value,
@@ -54,7 +54,7 @@ module MEMstate(
     end
     always @(posedge clk) begin
         if(exe_to_mem_valid & mem_allowin)
-            alu_result <= exe_alu_result;
+            alu_result <= exe_result;
     end
     always @(posedge clk) begin
         if(~resetn)
@@ -70,7 +70,7 @@ module MEMstate(
     /* sram instantiation */
     assign data_sram_en    = exe_res_from_mem || exe_mem_we;
     assign data_sram_we    = {4{exe_mem_we}};
-    assign data_sram_addr  = exe_alu_result;
+    assign data_sram_addr  = exe_result;
     assign data_sram_wdata = exe_rkd_value;
 
     assign mem_result      = data_sram_rdata;

@@ -7,7 +7,7 @@ module EXEstate(
     input       [5 :0] id_rf_all, // {id_rf_we, id_rf_waddr}
     input              id_to_exe_valid,
     input       [31:0] id_pc,    
-    input       [80:0] id_alu_data_all, 
+    input       [79:0] id_alu_data_all, 
     // {calc_h,calc_s,alu_op[14:0] revised in exp10, alu_src1[31:0], alu_src2[31:0]}
     input              id_res_from_mem, 
     input        [7:0] id_mem_all,
@@ -29,7 +29,7 @@ module EXEstate(
     // reg         exe_valid;
     reg         exe_calc_h;
     reg         exe_calc_s;
-    reg  [14:0] exe_alu_op;
+    reg  [13:0] exe_alu_op;
     reg  [31:0] exe_alu_src1;
     reg  [31:0] exe_alu_src2;
     reg  [5 :0] exe_rf_all;
@@ -44,14 +44,14 @@ module EXEstate(
     // wire [31:0] exe_result;
 
     /* valid signals */
-    assign exe_ready_go      = ~alu_op[13] | div_complete;
+    assign exe_ready_go      = ~exe_alu_op[13] | div_complete;
     assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin;     
     assign exe_to_mem_valid  = exe_valid & exe_ready_go;
     always @(posedge clk) begin
         if(~resetn)
             exe_valid <= 1'b0;
-        else
-            exe_valid <= id_to_exe_valid & exe_allowin; 
+        else if(exe_allowin)
+            exe_valid <= id_to_exe_valid; 
     end
 
     /* idstate <-> exestate */
@@ -81,7 +81,7 @@ module EXEstate(
         .alu_src2   (exe_alu_src2    ),
         .alu_result (exe_alu_result  )
     );
-    module mul(
+    mul u_mul(
         .mul_clk(clk),
         .resetn(resetn),
         .mul_signed(exe_calc_s),
@@ -90,11 +90,12 @@ module EXEstate(
         .result(mul_temp_result)
     );
     /* exe forwarding */
-    assign mul_result = {32{exe_calc_h}} & mul_temp_result[63:32] | {32{~exe_calc_h}} & mul_temp_result[31:0];
-    module div(
+    assign mul_result = {32{exe_calc_h}} & mul_temp_result[63:32] 
+                        | {32{~exe_calc_h}} & mul_temp_result[31:0];
+    div u_div(
         .div_clk(clk),
         .resetn(resetn),
-        .div(exe_aluop[13]),
+        .div(exe_alu_op[13]),
         .div_signed(exe_calc_s),
         .x(exe_alu_src1),
         .y(exe_alu_src2),
@@ -103,8 +104,8 @@ module EXEstate(
         .complete(div_complete)
     );
     assign div_result = {32{exe_calc_h}} & divide_result | {32{~exe_calc_h}} & mod_result;
-    assign exe_result = {32{alu_op[12]}} & mul_result | {32{alu_op[13]}} & div_result 
-                        | {32{~alu_op[12] & ~alu_op[13]}} & alu_result;
+    assign exe_result = {32{exe_alu_op[12]}} & mul_result | {32{exe_alu_op[13]}} & div_result 
+                        | {32{~exe_alu_op[12] & ~exe_alu_op[13]}} & exe_alu_result;
     assign exe_fwd_all = {exe_res_from_mem, exe_rf_all, exe_result};
 
 endmodule
