@@ -16,10 +16,11 @@ module IDstate(
     input             exe_allowin,
     output     [5 :0] id_rf_all, // {id_rf_we, id_rf_waddr[4:0]}
     output            id_to_exe_valid,   
-    output     [80:0] id_alu_data_all, 
-    // {calc_h,calc_u,alu_op[14:0] revised in exp10, alu_src1[31:0], alu_src2[31:0]}
+    output     [79:0] id_alu_data_all, 
+    // {calc_h,calc_s,alu_op[14:0] revised in exp10, alu_src1[31:0], alu_src2[31:0]}
     output            id_res_from_mem, // res_from_mem
     output      [7:0] id_mem_all,// should be revised in exp11 for st.h/b
+    //{mem_we, ld_b, ld_h, ld_w, ld_ue, st_b, st_h, st_w}
     output     [31:0] id_rkd_value,
     // idstate <-> wbstate
     // input      [5 :0] exe_rf_all, // {exe_rf_we, exe_rf_waddr}
@@ -44,8 +45,8 @@ module IDstate(
     wire        st_h;
     wire        st_b;
     wire        calc_h;//the calculation should be done in unsigned
-    wire        calc_u;//use the high part of mul or high part of div(part of mod)
-    wire [14:0] alu_op;//extended in exp10
+    wire        calc_s;//use the high part of mul or high part of div(part of mod)
+    wire [13:0] alu_op;//extended in exp10
     wire [31:0] alu_src1;
     wire [31:0] alu_src2;
     wire        src1_is_pc;
@@ -206,8 +207,8 @@ module IDstate(
     assign st_b   = inst_st_b;
     assign st_h   = inst_st_h;
     assign st_w   = inst_st_w;
-    assign calc_h = inst_mulh_w | inst_mulh_wu | inst_mod_w | inst_mod_wu;
-    assign calc_u = inst_mulh_wu | inst_mod_wu | inst_div_wu;
+    assign calc_h = inst_mulh_w | inst_mulh_wu | inst_div_w | inst_div_wu;
+    assign calc_s = inst_mulh_w | inst_mul_w | inst_mod_w | inst_div_w;
 
 
     always @(posedge clk) begin
@@ -338,8 +339,7 @@ module IDstate(
     assign alu_op[10] = inst_srai_w | inst_srai_w;
     assign alu_op[11] = inst_lu12i_w;
     assign alu_op[12] = inst_mul_w | inst_mulh_w | inst_mulh_wu;
-    assign alu_op[13] = inst_div_w | inst_div_wu;
-    assign alu_op[14] = inst_mod_w | inst_mod_wu;
+    assign alu_op[13] = inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;;//mod uses the same op as div and
 
     assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
     assign need_ui12  =  inst_andi | inst_ori | inst_andi | inst_xori | inst_sltui | inst_bltu | inst_bgeu;
