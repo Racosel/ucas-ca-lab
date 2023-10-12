@@ -125,7 +125,6 @@ module EXEstate(
                         | {32{~exe_alu_op[12] & ~exe_alu_op[13]}} & exe_alu_result;
     assign exe_fwd_all = {exe_res_from_mem, exe_rf_all, exe_result};
 
-
     assign rj_eq_rd = (exe_alu_src1 == exe_alu_src2);
     assign br_taken_exe = (inst_beq  &&  rj_eq_rd
                           || inst_bne  && !rj_eq_rd//can be extended by use alu_op and result from alu
