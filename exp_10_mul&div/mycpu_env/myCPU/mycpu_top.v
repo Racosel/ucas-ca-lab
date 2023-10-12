@@ -50,8 +50,11 @@ module mycpu_top(
     wire [31:0] exe_rkd_value;
 
 
-    wire        br_taken;
-    wire [31:0] br_target;
+    wire        br_taken_id;
+    wire        br_taken_exe;
+    wire [31:0] br_target_id;
+    wire [31:0] br_target_exe;
+    wire [5 :0] br_rf_all_id;
     // wire [31:0] id_to_if_pc_next;
     wire [31:0] if_inst;
     wire [80:0] id_alu_data_all;
@@ -71,8 +74,10 @@ module mycpu_top(
         .inst_sram_rdata(inst_sram_rdata),
         
         .id_allowin(id_allowin),
-        .br_taken(br_taken),
-        .br_target(br_target),
+        .br_taken_id(br_taken_id),
+        .br_taken_exe(br_taken_exe),
+        .br_target_id(br_target_id),
+        .br_target_exe(br_target_exe),
         // .id_to_if_pc_next(id_to_if_pc_next),
         .if_to_id_valid(if_to_id_valid),
         .if_inst(if_inst),
@@ -85,8 +90,10 @@ module mycpu_top(
         .id_valid(id_valid),
 
         .id_allowin(id_allowin),
-        .br_taken(br_taken),
-        .br_target(br_target),
+        .br_taken_id(br_taken_id),
+        .br_taken_exe(br_taken_exe),
+        .br_target_id(br_target_id),
+        .br_rf_all_id(br_rf_all_id),
         // .id_to_if_pc_next(id_to_if_pc_next),
         .if_to_id_valid(if_to_id_valid),
         .if_inst(if_inst),
@@ -124,6 +131,10 @@ module mycpu_top(
         .id_res_from_mem(id_res_from_mem),
         .id_mem_all(id_mem_all),
         .id_rkd_value(id_rkd_value),
+        .br_target_id(br_target_id),
+        .br_taken_exe(br_taken_exe),
+        .br_target_exe(br_target_exe),
+        .br_rf_all_id(br_rf_all_id),
 
         .mem_allowin(mem_allowin),
         .exe_fwd_all(exe_fwd_all),

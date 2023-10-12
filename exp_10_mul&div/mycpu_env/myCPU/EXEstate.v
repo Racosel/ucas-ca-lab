@@ -4,6 +4,10 @@ module EXEstate(
     output reg         exe_valid,
     // idstate <-> exestate
     output             exe_allowin,
+    output             br_taken_exe,
+    input       [5 :0] br_rf_all_id,//beq,bne,blt,bltu,bge,bgeu
+    input       [31:0] br_target_id,
+    output reg  [31:0] br_target_exe,
     input       [5 :0] id_rf_all, // {id_rf_we, id_rf_waddr}
     input              id_to_exe_valid,
     input       [31:0] id_pc,    
@@ -27,12 +31,14 @@ module EXEstate(
 
     wire        exe_ready_go;
     // reg         exe_valid;
+    reg         inst_beq, inst_bne, inst_blt, inst_bltu, inst_bge, inst_bgeu;
     reg         exe_calc_h;
     reg         exe_calc_s;
     reg  [13:0] exe_alu_op;
     reg  [31:0] exe_alu_src1;
     reg  [31:0] exe_alu_src2;
     reg  [5 :0] exe_rf_all;
+    reg  [5 :0] br_ref_exe;
 
     wire [31:0] exe_alu_result;
     wire [63:0] mul_temp_result;
@@ -42,6 +48,7 @@ module EXEstate(
     wire [31:0] div_result;//result of the dividor
     wire        div_complete;
     // wire [31:0] exe_result;
+    wire        rj_eq_rd;
 
     /* valid signals */
     assign exe_ready_go      = ~exe_alu_op[13] | div_complete;
@@ -49,6 +56,8 @@ module EXEstate(
     assign exe_to_mem_valid  = exe_valid & exe_ready_go;
     always @(posedge clk) begin
         if(~resetn)
+            exe_valid <= 1'b0;
+        else if(br_taken_exe)
             exe_valid <= 1'b0;
         else if(exe_allowin)
             exe_valid <= id_to_exe_valid; 
@@ -66,6 +75,14 @@ module EXEstate(
     always @(posedge clk) begin
         if(id_to_exe_valid & exe_allowin)
             {exe_res_from_mem, exe_mem_we, exe_rkd_value} <= {id_res_from_mem, id_mem_all[7], id_rkd_value};
+    end
+    always @(posedge clk ) begin
+        if(id_to_exe_valid & exe_allowin)
+            {inst_beq, inst_bne, inst_blt, inst_bltu, inst_bge, inst_bgeu} <= br_rf_all_id;
+    end
+    always @(posedge clk ) begin
+        if(id_to_exe_valid & exe_allowin)
+            br_target_exe <= br_target_id;
     end
     always @(posedge clk) begin
         if(~resetn)
@@ -108,4 +125,9 @@ module EXEstate(
                         | {32{~exe_alu_op[12] & ~exe_alu_op[13]}} & exe_alu_result;
     assign exe_fwd_all = {exe_res_from_mem, exe_rf_all, exe_result};
 
+
+    assign rj_eq_rd = (exe_alu_src1 == exe_alu_src2);
+    assign br_taken_exe = (inst_beq  &&  rj_eq_rd
+                          || inst_bne  && !rj_eq_rd//can be extended by use alu_op and result from alu
+                          ) & exe_valid;//always generated in one cycle, if not, do as id
 endmodule

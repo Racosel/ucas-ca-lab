@@ -10,8 +10,10 @@ module IFstate(
     input      [31:0] inst_sram_rdata,
 
     input             id_allowin,
-    input             br_taken,
-    input      [31:0] br_target,
+    input             br_taken_id,
+    input      [31:0] br_target_id,
+    input             br_taken_exe,
+    input      [31:0] br_target_exe,
     output            if_to_id_valid,
     output     [31:0] if_inst,
     output reg [31:0] if_pc
@@ -43,7 +45,7 @@ module IFstate(
 
     /* Write if_pc: write pc_next generated from the former instruction */
     assign pc_seq  = if_pc + 32'd4;  
-    assign pc_next = br_taken ? br_target : pc_seq;
+    assign pc_next = br_taken_exe ? br_target_exe : br_taken_id ? br_target_id : pc_seq;
     // br signals passed on from IDstate
     always @(posedge clk) begin
         if(~resetn)

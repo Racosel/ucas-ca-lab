@@ -4,8 +4,9 @@ module IDstate(
     output reg        id_valid,
     // ifstate <-> idstate
     output            id_allowin,
-    output            br_taken,
-    output     [31:0] br_target,
+    output            br_taken_id,
+    output      [5:0] br_rf_all_id,
+    output     [31:0] br_target_id,
     input             if_to_id_valid,
     input      [31:0] if_inst,
     input      [31:0] if_pc,
@@ -14,6 +15,7 @@ module IDstate(
     // control: res_from_mem, mem_we
     output reg [31:0] id_pc,
     input             exe_allowin,
+    input             br_taken_exe,
     output     [5 :0] id_rf_all, // {id_rf_we, id_rf_waddr[4:0]}
     output            id_to_exe_valid,   
     output     [79:0] id_alu_data_all, 
@@ -57,7 +59,6 @@ module IDstate(
     wire        gr_we;
     wire        mem_we;
     wire        src_reg_is_rd;
-    wire        rj_eq_rd;
     wire [4: 0] dest;
     wire [31:0] rj_value;
     wire [31:0] rkd_value;
@@ -97,31 +98,31 @@ module IDstate(
     wire        inst_srli_w;
     wire        inst_srai_w;
     wire        inst_addi_w;
-    // wire        inst_slti;
-    // wire        inst_sltui;
-    // wire        inst_andi;
-    // wire        inst_ori;
-    // wire        inst_xori;
-    // wire        inst_sll_w;
-    // wire        inst_srl_w;
-    // wire        inst_sra_w;
+    wire        inst_slti;
+    wire        inst_sltui;
+    wire        inst_andi;
+    wire        inst_ori;
+    wire        inst_xori;
+    wire        inst_sll_w;
+    wire        inst_srl_w;
+    wire        inst_sra_w;
 
-    // wire        inst_mul_w;
-    // wire        inst_mulh_w;
-    // wire        inst_mulh_wu;
-    // wire        inst_div_w;
-    // wire        inst_mod_w;
-    // wire        inst_div_wu;
-    // wire        inst_mod_wu;
+    wire        inst_mul_w;
+    wire        inst_mulh_w;
+    wire        inst_mulh_wu;
+    wire        inst_div_w;
+    wire        inst_mod_w;
+    wire        inst_div_wu;
+    wire        inst_mod_wu;
 
     wire        inst_ld_w;
     wire        inst_st_w;
-    // wire        inst_ld_b;
-    // wire        inst_ld_h;
-    // wire        inst_ld_bu;
-    // wire        inst_ld_hu;
-    // wire        inst_st_b;
-    // wire        inst_st_h;
+    wire        inst_ld_b;
+    wire        inst_ld_h;
+    wire        inst_ld_bu;
+    wire        inst_ld_hu;
+    wire        inst_st_b;
+    wire        inst_st_h;
 
     wire        inst_jirl;
     wire        inst_b;
@@ -214,7 +215,7 @@ module IDstate(
     always @(posedge clk) begin
         if(~resetn)
             id_valid <= 1'b0;
-        else if(br_taken)
+        else if(br_taken_id | br_taken_exe)
             id_valid <= 1'b0;
         else if(id_allowin)
             id_valid <= if_to_id_valid;
@@ -237,19 +238,16 @@ module IDstate(
     //     raw_wb_id_reg <= raw_wb_id;
     // end
 
-    assign rj_eq_rd = (rj_value == rkd_value);
-    assign br_taken = (inst_beq  &&  rj_eq_rd
-                    || inst_bne  && !rj_eq_rd
-                    || inst_jirl
+    assign br_taken_id = (
+                    inst_jirl
                     || inst_bl
                     || inst_b
                     ) && id_valid && ~raw_exe_ldw;
+    assign br_rf_all_id = {inst_beq, inst_bne, inst_blt, inst_bltu, inst_bge, inst_bgeu};
     // (id_valid | raw_exe_id | raw_mem_id | raw_wb_id | raw_wb_id_reg)
-    assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (id_pc + br_offs) :
+    assign br_target_id = (inst_beq || inst_bne || inst_bl || inst_b) ? (id_pc + br_offs) :
                                                     /*inst_jirl*/ (rj_value + jirl_offs);
-    assign pc_seq    = id_pc + 32'd4;
-    assign pc_next   = br_taken ? br_target : pc_seq;
-
+    
     /* decoding */
     assign op_31_26  = inst[31:26];
     assign op_25_22  = inst[25:22];
@@ -344,7 +342,7 @@ module IDstate(
     assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
     assign need_ui12  =  inst_andi | inst_ori | inst_andi | inst_xori;
     assign need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti| inst_sltui ;
-    assign need_si16  =  inst_jirl | inst_beq | inst_bne;
+    assign need_si16  =  inst_jirl | inst_beq | inst_bne;//| inst_blt | inst_bltu | inst_bge | inst_bgeu;
     assign need_si20  =  inst_lu12i_w | inst_pcaddu12i;
     assign need_si26  =  inst_b | inst_bl;
     assign src2_is_4  =  inst_jirl | inst_bl;
