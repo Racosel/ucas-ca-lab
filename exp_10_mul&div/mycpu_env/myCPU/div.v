@@ -110,6 +110,7 @@ module div(
             reg_complete_u <= 1'b1;
         end
     end
+    
     always @(posedge div_clk ) begin
         if(~ handled_s | complete_s & complete_u)
             reg_complete_s <= 1'b0;
