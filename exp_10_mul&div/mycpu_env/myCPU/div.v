@@ -103,7 +103,7 @@ module div(
         end
     end
     always @(posedge div_clk ) begin
-        if(~ handled_u)begin
+        if(~ handled_u | complete_s & complete_u)begin
             reg_complete_u <= 1'b0;
         end
         else if(complete_u)begin
@@ -111,7 +111,7 @@ module div(
         end
     end
     always @(posedge div_clk ) begin
-        if(~ handled_s)
+        if(~ handled_s | complete_s & complete_u)
             reg_complete_s <= 1'b0;
         else if(complete_s)
             reg_complete_s <= 1'b1;
