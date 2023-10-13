@@ -88,6 +88,7 @@ module MEMstate(
                   | {4{st_b}} & {exe_result[1:0]==2'b11,exe_result[1:0]==2'b10,
                                  exe_result[1:0]==2'b01,exe_result[1:0]==2'b00};
     /* sram instantiation */
+    
     assign data_sram_en    = exe_res_from_mem | mem_we;
     assign data_sram_we    = {4{mem_we}} & strb;
     assign data_sram_addr  = {exe_result[31:2],2'b0};
