@@ -99,12 +99,12 @@ module EXEstate(
         .alu_result (exe_alu_result  )
     );
     mul u_mul(
-        .mul_clk(clk),
+        .clk(clk),
         .resetn(resetn),
-        .mul_signed(exe_calc_s),
-        .x(exe_alu_src1),
-        .y(exe_alu_src2),
-        .result(mul_temp_result)
+        .sign(exe_calc_s),
+        .X(exe_alu_src1),
+        .Y(exe_alu_src2),
+        .P(mul_temp_result)
     );
     /* exe forwarding */
     assign mul_result = {32{exe_calc_h}} & mul_temp_result[63:32] 
