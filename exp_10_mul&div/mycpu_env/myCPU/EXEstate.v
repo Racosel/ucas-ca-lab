@@ -99,12 +99,12 @@ module EXEstate(
         .alu_result (exe_alu_result  )
     );
     mul u_mul(
-        .mul_clk(clk),
+        .clk(clk),
         .resetn(resetn),
-        .mul_signed(exe_calc_s),
-        .x(exe_alu_src1),
-        .y(exe_alu_src2),
-        .result(mul_temp_result)
+        .sign(exe_calc_s),
+        .X(exe_alu_src1),
+        .Y(exe_alu_src2),
+        .P(mul_temp_result)
     );
     /* exe forwarding */
     assign mul_result = {32{exe_calc_h}} & mul_temp_result[63:32] 
@@ -124,6 +124,7 @@ module EXEstate(
     assign exe_result = {32{exe_alu_op[12]}} & mul_result | {32{exe_alu_op[13]}} & div_result 
                         | {32{~exe_alu_op[12] & ~exe_alu_op[13]}} & exe_alu_result;
     assign exe_fwd_all = {exe_res_from_mem, exe_rf_all, exe_result};
+
 
     assign rj_eq_rd = (exe_alu_src1 == exe_alu_src2);
     assign br_taken_exe = (inst_beq  &&  rj_eq_rd
