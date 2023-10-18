@@ -227,31 +227,31 @@ module multiplier(          // 34 bit multiplier
     );
 endmodule
 
-module mul(
+module mul_34(
     // input  [33:0] X,
     // input  [33:0] Y,
     // output [67:0] P
-    input         mul_clk,
-    input         resetn,
-    input         mul_signed,
-    input  [31:0] x,
-    input  [31:0] y,
-    output [63:0] result
+//    input         clk,
+//    input         resetn,
+    input         sign,
+    input  [31:0] X,
+    input  [31:0] Y,
+    output [63:0] P
 );
 
     wire  [33:0] X_;
     wire  [33:0] Y_;
     wire  [67:0] P_;
     reg   [63:0] P_r;
-    assign X_ = {{2{mul_signed & x[31]}}, x};
-    assign Y_ = {{2{mul_signed & y[31]}}, y};
+    assign X_ = {{2{sign & X[31]}}, X};
+    assign Y_ = {{2{sign & Y[31]}}, Y};
     multiplier multiplier0(
         X_,
         Y_,
         P_
     );
-    assign result = P_[63:0];
-//    always @(posedge mul_clk) begin
+    // assign P = P_[63:0];
+//    always @(posedge clk) begin
 //        if (!resetn) begin
 //            P_r <= 64'd0;
 //        end
@@ -259,6 +259,6 @@ module mul(
 //            P_r <= P_[63:0];
 //        end
 //    end
-//    assign result = P_r;
+    assign P = P_;
 
 endmodule
