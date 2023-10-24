@@ -4,6 +4,7 @@ module EXEstate(
     output reg         exe_valid,
     // idstate <-> exestate
     output             exe_allowin,
+
     output             br_taken_exe,
     input       [5 :0] br_rf_all_id,//beq,bne,blt,bltu,bge,bgeu
     input       [31:0] br_target_id,
@@ -16,10 +17,12 @@ module EXEstate(
     input              id_res_from_mem, 
     input        [7:0] id_mem_all,
     //{mem_we, ld_b, ld_h, ld_w, ld_ue, st_b, st_h, st_w};should be used in exp11
+
     input       [31:0] id_rkd_value,
     // exestate <-> memstate
     input              mem_allowin,
     // output reg  [5 :0] exe_rf_all,  // {exe_rf_we, exe_rf_waddr}
+
     output      [38:0] exe_fwd_all, // {exe_res_from_mem, exe_rf_we, exe_rf_waddr, exe_result}
     output             exe_to_mem_valid,
     output reg  [31:0] exe_pc,
@@ -31,6 +34,7 @@ module EXEstate(
 
     wire        exe_ready_go;
     // reg         exe_valid;
+
     reg         inst_beq, inst_bne, inst_blt, inst_bltu, inst_bge, inst_bgeu;
     reg         exe_calc_h;
     reg         exe_calc_s;
@@ -52,6 +56,7 @@ module EXEstate(
 
     /* valid signals */
     assign exe_ready_go      = ~exe_alu_op[13] | div_complete;
+
     assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin;     
     assign exe_to_mem_valid  = exe_valid & exe_ready_go;
     always @(posedge clk) begin
@@ -61,6 +66,7 @@ module EXEstate(
             exe_valid <= 1'b0;
         else if(exe_allowin)
             exe_valid <= id_to_exe_valid; 
+
     end
 
     /* idstate <-> exestate */
@@ -90,6 +96,7 @@ module EXEstate(
         else if(id_to_exe_valid & exe_allowin)
             exe_rf_all <= id_rf_all;
     end
+
 
     /* alu instantiation */        
     alu u_alu(

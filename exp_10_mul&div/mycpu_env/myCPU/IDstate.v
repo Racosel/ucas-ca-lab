@@ -182,6 +182,7 @@ module IDstate(
     assign need_raddr1 = ~(inst_lu12i_w | inst_bl | inst_b);
     assign need_raddr2 = need_raddr1 & ~(inst_addi_w | inst_ld_w | inst_jirl | inst_slli_w | inst_srai_w 
                            | inst_srli_w | inst_slti | inst_sltui | inst_andi | inst_ori | inst_xori);
+
     // assign raw_exe_id  = exe_valid & exe_rf_we & ((need_raddr1 & (|rf_raddr1) & exe_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & exe_rf_waddr == rf_raddr2));
     // assign raw_mem_id  = mem_valid & mem_rf_we & ((need_raddr1 & (|rf_raddr1) & mem_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & mem_rf_waddr == rf_raddr2));
     // assign raw_wb_id   = wb_valid  & wb_rf_we  & ((need_raddr1 & (|rf_raddr1) & wb_rf_waddr  == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & wb_rf_waddr  == rf_raddr2));
@@ -199,7 +200,7 @@ module IDstate(
 
     // assign id_ready_go = ~raw_exe_id & ~raw_mem_id & ~raw_wb_id;
     assign id_ready_go = ~raw_exe_ldw;
-    assign id_allowin  = ~id_valid & id_ready_go | id_ready_go & exe_allowin;
+    assign id_allowin  = ~id_valid | id_ready_go & exe_allowin;
     assign id_to_exe_valid = id_valid & id_ready_go;
     assign ld_b   = inst_ld_b | inst_ld_bu;
     assign ld_h   = inst_ld_h | inst_ld_hu;
