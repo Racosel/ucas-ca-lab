@@ -119,7 +119,7 @@ module EXEstate(
         .alu_src2   (exe_alu_src2    ),
         .alu_result (exe_alu_result  )
     );
-    mul u_mul(
+    mul_34 u_mul(
         .mul_clk(clk),
         .resetn(resetn),
         .mul_signed(exe_calc_s),
