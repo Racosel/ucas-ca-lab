@@ -66,19 +66,20 @@ module mycpu_top(
     wire        ertn_flush;
     wire        exec_flush;
     wire        cancel_exc_ertn;
+    // wire        cancel_exc_ertn_mem;
     wire [1:0] if_exc_rf;//if exc
 
     wire [31:0] csr_rd_value;
     wire        csr_re;
     wire [13:0] csr_rd_num;
     wire [1 :0] id_exc_rf;
-    wire [108:0] id_csr_rf;//id exc
+    wire [111:0] id_csr_rf;//id exc
 
     wire [1 :0] exe_exc_rf;
-    wire [108:0] exe_csr_rf;//exe exc
+    wire [111:0] exe_csr_rf;//exe exc
 
     wire [1 :0] mem_exc_rf;
-    wire [108:0] mem_csr_rf;//mem exc
+    wire [111:0] mem_csr_rf;//mem exc
 
     wire [31:0] csr_wr_mask;
     wire [31:0] csr_wr_value;
@@ -88,6 +89,7 @@ module mycpu_top(
     wire [0 :0] wb_exc;
     assign exec_flush      = |wb_exc;
     assign cancel_exc_ertn = ertn_flush | exec_flush;
+    // assign cancel_exc_ertn_mem = cancel_exc_ertn | (|mem_exc_rf);
     IFstate ifstate(
         .clk(clk),
         .resetn(resetn),
@@ -213,7 +215,7 @@ module mycpu_top(
         .data_sram_we(data_sram_we),
         .data_sram_addr(data_sram_addr),
         .data_sram_wdata(data_sram_wdata),
-        .data_sram_rdata(data_sram_rdata)
+        .data_sram_rdata(data_sram_rdata),
         .cancel_exc_ertn(cancel_exc_ertn),
         .exe_csr_rf(exe_csr_rf),
         .exe_exc_rf(exe_exc_rf),
@@ -236,7 +238,7 @@ module mycpu_top(
         .debug_wb_rf_wnum(debug_wb_rf_wnum),
         .debug_wb_rf_wdata(debug_wb_rf_wdata),
 
-        .wb_rf_all(wb_rf_all)
+        .wb_rf_all(wb_rf_all),
 
         .cancel_exc_ertn(cancel_exc_ertn),
         .mem_csr_rf(mem_csr_rf),
@@ -250,6 +252,7 @@ module mycpu_top(
     );
 
     csr csr_reg(
+    .clk(clk),
     .exc(wb_exc),
     .ertn_flush(ertn_flush),
     .resetn(resetn),
@@ -259,6 +262,7 @@ module mycpu_top(
     .csr_we(csr_we),
     .csr_wr_mask(csr_wr_mask),
     .csr_wr_value(csr_wr_value),
+    .wb_pc(debug_wb_pc),
     .csr_rd_value(csr_rd_value),
     .csr_eentry_pc(exec_pc),
     .csr_eertn_pc(ertn_pc)

@@ -32,7 +32,7 @@ module IFstate(
 
     assign if_ready_go    = 1'b1;
     assign if_to_id_valid = if_valid & if_ready_go;
-    assign if_allowin     = ~if_valid | if_ready_go & id_allowin;     
+    assign if_allowin     = ~if_valid | if_ready_go & id_allowin | ertn_flush | exec_flush;     
     
     always @(posedge clk) begin
         if(~resetn)

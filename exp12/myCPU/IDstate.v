@@ -38,7 +38,7 @@ module IDstate(
     input      [1 :0] if_exc_rf,//use in exp 13
     output            csr_re,//to csr
     output     [13:0] csr_rd_num,
-    output    [108:0] id_csr_rf,//{value_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+    output    [111:0] id_csr_rf,//{csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
     output     [1 :0] id_exc_rf//{ertn,syscall}only uses syscall(0),other will be use in exp 13
 );
 
@@ -72,9 +72,6 @@ module IDstate(
     wire [31:0] imm;
     wire [31:0] br_offs;
     wire [31:0] jirl_offs;
-
-    wire [31:0] pc_seq;
-    wire [31:0] pc_next;
 
     wire [ 5:0] op_31_26;
     wire [ 3:0] op_25_22;
@@ -197,6 +194,7 @@ module IDstate(
     wire [31:0] csr_rvalue;
     wire        csr_wr;
     wire        csr_rd;
+    wire        ans_is_csr;
 
     assign {exe_csr_wr, exe_csr_wr_num, exe_res_from_mem, exe_rf_we, exe_rf_waddr, exe_alu_result} = exe_fwd_all;
     assign {mem_csr_wr, mem_csr_wr_num, mem_rf_we, mem_rf_waddr, mem_rf_wdata}                     = mem_fwd_all;
@@ -239,7 +237,7 @@ module IDstate(
 
     // assign id_ready_go = ~raw_exe_id & ~raw_mem_id & ~raw_wb_id;
     assign id_ready_go = ~raw_exe_ldw;
-    assign id_allowin  = ~id_valid & id_ready_go | id_ready_go & exe_allowin;
+    assign id_allowin  = ~id_valid & id_ready_go | id_ready_go & exe_allowin | cancel_exc_ertn;
     assign id_to_exe_valid = id_valid & id_ready_go;
     assign ld_b   = inst_ld_b | inst_ld_bu;
     assign ld_h   = inst_ld_h | inst_ld_hu;
@@ -382,9 +380,9 @@ module IDstate(
     assign alu_op[ 8] = inst_slli_w | inst_sll_w;
     assign alu_op[ 9] = inst_srli_w | inst_srl_w;
     assign alu_op[10] = inst_srai_w | inst_sra_w;
-    assign alu_op[11] = inst_lu12i_w;
+    assign alu_op[11] = inst_lu12i_w | ans_is_csr;
     assign alu_op[12] = inst_mul_w | inst_mulh_w | inst_mulh_wu;
-    assign alu_op[13] = inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;;//mod uses the same op as div and
+    assign alu_op[13] = inst_div_w | inst_div_wu | inst_mod_w | inst_mod_wu;//mod uses the same op as div and
 
     assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
     assign need_ui12  =  inst_andi | inst_ori | inst_andi | inst_xori;
@@ -409,6 +407,7 @@ module IDstate(
                            | inst_csrwr | inst_csrxchg;
 
     assign src1_is_pc    = inst_jirl | inst_bl | inst_pcaddu12i;
+    assign ans_is_csr    = inst_csrrd | inst_csrwr | inst_csrxchg;
 
     assign src2_is_imm =inst_slli_w |
                         inst_srli_w |
@@ -432,12 +431,12 @@ module IDstate(
                         inst_xori   |
                         inst_pcaddu12i;
     assign alu_src1 = src1_is_pc  ? id_pc[31:0] : rj_value;
-    assign alu_src2 = src2_is_imm ? imm : rkd_value;
+    assign alu_src2 = ans_is_csr? csr_rd_value : src2_is_imm ? imm : rkd_value;
 
     assign res_from_mem = inst_ld_w | inst_ld_b | inst_ld_bu | inst_ld_h | inst_ld_hu;
     assign dst_is_r1    = inst_bl;
     assign gr_we        = ~inst_beq & ~inst_bne & ~inst_b & ~inst_st_w & ~inst_st_h & ~inst_st_b & ~inst_blt 
-                          & ~inst_bltu & ~inst_bge & ~inst_bgeu & ~inst_syscall & ~inst_ertn &~inst_csrwr;// serve as rf_we
+                          & ~inst_bltu & ~inst_bge & ~inst_bgeu & ~inst_syscall & ~inst_ertn;// serve as rf_we
     assign mem_we       = inst_st_w | inst_st_b | inst_st_h;   
     assign dest         = dst_is_r1 ? 5'd1 : rd;
 
@@ -475,15 +474,15 @@ module IDstate(
     assign id_rkd_value = rkd_value;
     assign id_res_from_mem = res_from_mem;
 
-    assign csr_num    = inst[23:10]
+    assign csr_num    = inst[23:10];
     assign csr_rd_num = csr_num;
     assign csr_wr_num = csr_num;
     assign id_exc_rf[0] = inst_ertn;
     assign id_exc_rf[1] = inst_syscall;
     assign csr_mask = {32{inst_csrwr}} & {32{1'b1}} | {32{inst_csrxchg}} & rj_value;
     assign csr_wr_value = rkd_value;
-    assign csr_rd = inst_csrrd | inst_csrxchg;
+    assign csr_rd = inst_csrrd | inst_csrxchg | inst_csrwr;
     assign csr_re = csr_rd;
     assign csr_wr = inst_csrwr | inst_csrxchg;
-    assign id_csr_rf = {csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue};
+    assign id_csr_rf = {csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wr_value};
 endmodule

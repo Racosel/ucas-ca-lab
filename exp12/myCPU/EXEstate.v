@@ -28,10 +28,10 @@ module EXEstate(
     output reg  [7 :0] exe_mem_all,
     output reg  [31:0] exe_rkd_value,
     input              cancel_exc_ertn,//canceled by exception or ereturn
-    input      [108:0] id_csr_rf,//{csr_rd,csr_wr,csr_rd_value,csr_mask,csr_wvalue}
+    input      [111:0] id_csr_rf,//{csr_rd,csr_wr,csr_rd_value,csr_mask,csr_wvalue}
     input       [1 :0] id_exc_rf,
     output      [1 :0] exe_exc_rf,
-    output reg [108:0] exe_csr_rf//{csr_rd,csr_wr,csr_rd_value,csr_mask,csr_wvalue}
+    output reg [111:0] exe_csr_rf//{csr_rd,csr_wr,csr_rd_value,csr_mask,csr_wvalue}
 );
 
     wire        exe_ready_go;
@@ -59,7 +59,7 @@ module EXEstate(
 
     /* valid signals */
     assign exe_ready_go      = ~exe_alu_op[13] | div_complete;
-    assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin;     
+    assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin | cancel_exc_ertn;     
     assign exe_to_mem_valid  = exe_valid & exe_ready_go;
     always @(posedge clk) begin
         if(~resetn)
@@ -156,6 +156,6 @@ module EXEstate(
                           | inst_bgeu & ~exe_alu_result[0]
                           ) & exe_valid;//always generated in one cycle, if not, do as id
     assign exe_exc_rf = exe_exc_rf_reg;
-    assign exe_csr_wr_num = exe_csr_rf[106:92];
-    assign exe_csr_wr  = exe_csr_rf[107];
+    assign exe_csr_wr_num = exe_csr_rf[109:96];
+    assign exe_csr_wr  = exe_csr_rf[110];
 endmodule
