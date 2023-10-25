@@ -24,10 +24,10 @@ module MEMstate(
     output      [31:0] data_sram_wdata,
     input       [31:0] data_sram_rdata,
     input              cancel_exc_ertn,//canceled by exception or ereturn
-    input      [111:0] exe_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+    input       [78:0] exe_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
     input       [1 :0] exe_exc_rf,
     output      [1 :0] mem_exc_rf,
-    output reg [111:0] mem_csr_rf//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+    output reg  [78:0] mem_csr_rf//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
 );
 
     wire        mem_ready_go;
@@ -116,7 +116,7 @@ module MEMstate(
     assign data_sram_wdata = {32{st_b}} & {4{exe_rkd_value[7:0]}}
                              | {32{st_h}} & {2{exe_rkd_value[15:0]}}
                              | {32{st_w}} & exe_rkd_value;
-    assign mem_csr_wr_num = mem_csr_rf[109:96];
-    assign mem_csr_wr = mem_csr_rf[110];
+    assign mem_csr_wr_num = mem_csr_rf[77:64];
+    assign mem_csr_wr = mem_csr_rf[78];
     assign mem_exc_rf = mem_exc_rf_reg;
 endmodule

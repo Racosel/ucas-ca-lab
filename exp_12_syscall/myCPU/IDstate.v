@@ -38,7 +38,7 @@ module IDstate(
     input      [1 :0] if_exc_rf,//use in exp 13
     output            csr_re,//to csr
     output     [13:0] csr_rd_num,
-    output    [111:0] id_csr_rf,//{csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+    output     [78:0] id_csr_rf,//{csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
     output     [1 :0] id_exc_rf//{ertn,syscall}only uses syscall(0),other will be use in exp 13
 );
 
@@ -237,7 +237,7 @@ module IDstate(
 
     // assign id_ready_go = ~raw_exe_id & ~raw_mem_id & ~raw_wb_id;
     assign id_ready_go = ~raw_exe_ldw;
-    assign id_allowin  = ~id_valid & id_ready_go | id_ready_go & exe_allowin | cancel_exc_ertn;
+    assign id_allowin  = ~id_valid | id_ready_go & exe_allowin | cancel_exc_ertn;
     assign id_to_exe_valid = id_valid & id_ready_go;
     assign ld_b   = inst_ld_b | inst_ld_bu;
     assign ld_h   = inst_ld_h | inst_ld_hu;
@@ -253,10 +253,14 @@ module IDstate(
     always @(posedge clk) begin
         if(~resetn)
             id_valid <= 1'b0;
-        else if(br_taken_id | br_taken_exe | cancel_exc_ertn)
+        else if(br_taken_exe | cancel_exc_ertn)
             id_valid <= 1'b0;
-        else if(id_allowin)
-            id_valid <= if_to_id_valid;
+        else if(id_allowin)begin
+            if(br_taken_id)//被除法指令阻塞而且id级发生需要写回的跳转
+                id_valid <= 1'b0;
+            else
+                id_valid <= if_to_id_valid;
+        end
     end
 
     // pc & inst    
@@ -484,5 +488,5 @@ module IDstate(
     assign csr_rd = inst_csrrd | inst_csrxchg | inst_csrwr;
     assign csr_re = csr_rd;
     assign csr_wr = inst_csrwr | inst_csrxchg;
-    assign id_csr_rf = {csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wr_value};
+    assign id_csr_rf = {csr_wr,csr_wr_num,csr_mask,csr_wr_value};
 endmodule

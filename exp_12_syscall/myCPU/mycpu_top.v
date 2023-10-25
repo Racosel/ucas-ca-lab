@@ -73,13 +73,13 @@ module mycpu_top(
     wire        csr_re;
     wire [13:0] csr_rd_num;
     wire [1 :0] id_exc_rf;
-    wire [111:0] id_csr_rf;//id exc
+    wire [78:0] id_csr_rf;//id exc
 
     wire [1 :0] exe_exc_rf;
-    wire [111:0] exe_csr_rf;//exe exc
+    wire [78:0] exe_csr_rf;//exe exc
 
     wire [1 :0] mem_exc_rf;
-    wire [111:0] mem_csr_rf;//mem exc
+    wire [78:0] mem_csr_rf;//mem exc
 
     wire [31:0] csr_wr_mask;
     wire [31:0] csr_wr_value;

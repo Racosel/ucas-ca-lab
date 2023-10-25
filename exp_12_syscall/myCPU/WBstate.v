@@ -15,7 +15,7 @@ module WBstate(
     // idstate <-> wbstate
     output      [52:0] wb_rf_all,// {rf_we, rf_waddr, rf_wdata_reg}
     input              cancel_exc_ertn,//canceled by exception or ereturn
-    input      [111:0] mem_csr_rf,//{csr_rd,csr_wr,csr_rvalue,csr_mask,csr_wr_value}
+    input       [78:0] mem_csr_rf,//{csr_wr,csr_wr_num,csr_mask,csr_wr_value}
     input       [1 :0] mem_exc_rf,//{syscall,ertn}
     output      [31:0] csr_wr_mask,
     output      [31:0] csr_wr_value,
@@ -24,7 +24,6 @@ module WBstate(
     output      [0 :0] wb_exc,//for extension
     output             ertn_flush
 );
-    wire [31:0] csr_rvalue;
     wire        wb_ready_go;
     wire [31:0] rf_wdata;
     // reg         wb_valid;
@@ -35,7 +34,6 @@ module WBstate(
     reg [111:0] wb_csr_rf_reg;
     reg  [5 :0] wb_exc_rf_reg;
     wire        wb_csr_wr;
-    wire        wb_csr_rd;
 
     /* valid signals */
     assign wb_ready_go = 1'b1;
@@ -74,8 +72,8 @@ module WBstate(
     end
 
     assign wb_rf_all  = {wb_csr_wr,csr_wr_num,rf_we, rf_waddr, rf_wdata};
-    assign {wb_csr_rd,wb_csr_wr,csr_wr_num,csr_rvalue,csr_wr_mask,csr_wr_value} = wb_csr_rf_reg;
-    assign rf_wdata   = {32{~wb_csr_rd}} & rf_wdata_reg | {32{wb_csr_rd}} & csr_rvalue;
+    assign {wb_csr_wr,csr_wr_num,csr_wr_mask,csr_wr_value} = wb_csr_rf_reg;
+    assign rf_wdata   = rf_wdata_reg;
     assign wb_exc     = wb_exc_rf_reg[5:1] & {4{wb_valid}};
     assign ertn_flush = wb_exc_rf_reg[0] & wb_valid;
     /* debug info */

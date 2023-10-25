@@ -28,10 +28,10 @@ module EXEstate(
     output reg  [7 :0] exe_mem_all,
     output reg  [31:0] exe_rkd_value,
     input              cancel_exc_ertn,//canceled by exception or ereturn
-    input      [111:0] id_csr_rf,//{csr_rd,csr_wr,csr_rd_value,csr_mask,csr_wvalue}
+    input       [78:0] id_csr_rf,//{csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
     input       [1 :0] id_exc_rf,
     output      [1 :0] exe_exc_rf,
-    output reg [111:0] exe_csr_rf//{csr_rd,csr_wr,csr_rd_value,csr_mask,csr_wvalue}
+    output      [78:0] exe_csr_rf//{csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
 );
 
     wire        exe_ready_go;
@@ -56,6 +56,7 @@ module EXEstate(
     wire        rj_eq_rd;
     wire [13:0] exe_csr_wr_num;
     wire        exe_csr_wr;
+    reg [111:0] exe_csr_rf_reg;
 
     /* valid signals */
     assign exe_ready_go      = ~exe_alu_op[13] | div_complete;
@@ -100,9 +101,9 @@ module EXEstate(
 
     always @(posedge clk ) begin
         if(~resetn)
-            exe_csr_rf <= 6'b0;
+            exe_csr_rf_reg <= 79'b0;
         else if(id_to_exe_valid & exe_allowin)
-            exe_csr_rf <= id_csr_rf;
+            exe_csr_rf_reg <= id_csr_rf;
     end
 
     always @(posedge clk ) begin
@@ -131,9 +132,10 @@ module EXEstate(
     assign mul_result = {32{exe_calc_h}} & mul_temp_result[63:32] 
                         | {32{~exe_calc_h}} & mul_temp_result[31:0];
     div u_div(
-        .div_clk(clk),
+        .clk(clk),
         .resetn(resetn),
-        .div(exe_alu_op[13]),
+        .cancel_exc_ertn(cancel_exc_ertn),
+        .div(exe_alu_op[13] & exe_valid),
         .div_signed(exe_calc_s),
         .x(exe_alu_src1),
         .y(exe_alu_src2),
@@ -156,6 +158,7 @@ module EXEstate(
                           | inst_bgeu & ~exe_alu_result[0]
                           ) & exe_valid;//always generated in one cycle, if not, do as id
     assign exe_exc_rf = exe_exc_rf_reg;
-    assign exe_csr_wr_num = exe_csr_rf[109:96];
-    assign exe_csr_wr  = exe_csr_rf[110];
+    assign exe_csr_wr_num = exe_csr_rf_reg[77:64];
+    assign exe_csr_wr = exe_csr_rf_reg[78];
+    assign exe_csr_rf = exe_csr_rf_reg;
 endmodule
