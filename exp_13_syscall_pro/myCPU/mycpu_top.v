@@ -68,18 +68,21 @@ module mycpu_top(
     wire        exec_flush;
     wire        cancel_exc_ertn;
     // wire        cancel_exc_ertn_mem;
-    wire [1:0] if_exc_rf;//if exc
+    wire        if_exc_rf;//if exc
 
     wire [31:0] csr_rd_value;
     wire        csr_re;
     wire [13:0] csr_rd_num;
-    wire [1 :0] id_exc_rf;
+    wire [5 :0] id_exc_rf;
     wire [78:0] id_csr_rf;//id exc
+    wire [1 :0] id_timer_rf;
+    wire        has_int;
 
-    wire [1 :0] exe_exc_rf;
+    wire [63:0] current_time;
+    wire [5 :0] exe_exc_rf;
     wire [78:0] exe_csr_rf;//exe exc
 
-    wire [1 :0] mem_exc_rf;
+    wire [6 :0] mem_exc_rf;
     wire [78:0] mem_csr_rf;//mem exc
 
     wire [31:0] csr_wr_mask;
@@ -87,7 +90,7 @@ module mycpu_top(
     wire [13:0] csr_wr_num;
     wire        csr_we;//wb exc
 
-    wire [0 :0] wb_exc;
+    wire [5 :0] wb_exc;
     assign exec_flush      = |wb_exc;
     assign cancel_exc_ertn = ertn_flush | exec_flush;
     // assign cancel_exc_ertn_mem = cancel_exc_ertn | (|mem_exc_rf);
@@ -153,10 +156,12 @@ module mycpu_top(
         .cancel_exc_ertn(cancel_exc_ertn),
         .csr_rd_value(csr_rd_value),
         .if_exc_rf(if_exc_rf),
+        .has_int(has_int),
         .csr_re(csr_re),
         .csr_rd_num(csr_rd_num),
         .id_csr_rf(id_csr_rf),
-        .id_exc_rf(id_exc_rf)
+        .id_exc_rf(id_exc_rf),
+        .id_timer_rf(id_timer_rf)
     );
 
 
@@ -188,7 +193,9 @@ module mycpu_top(
         .exe_rkd_value(exe_rkd_value),
         .cancel_exc_ertn(cancel_exc_ertn),
         .id_csr_rf(id_csr_rf),
+        .id_timer_rf(id_timer_rf),
         .id_exc_rf(id_exc_rf),
+        .timer(current_time),
         .exe_exc_rf(exe_exc_rf),
         .exe_csr_rf(exe_csr_rf)
     );
@@ -253,19 +260,26 @@ module mycpu_top(
     );
 
     csr csr_reg(
-    .clk(clk),
-    .exc(wb_exc),
-    .ertn_flush(ertn_flush),
-    .resetn(resetn),
-    .csr_re(csr_re),
-    .csr_wr_num(csr_wr_num),
-    .csr_rd_num(csr_rd_num),
-    .csr_we(csr_we),
-    .csr_wr_mask(csr_wr_mask),
-    .csr_wr_value(csr_wr_value),
-    .wb_pc(debug_wb_pc),
-    .csr_rd_value(csr_rd_value),
-    .csr_eentry_pc(exec_pc),
-    .csr_eertn_pc(ertn_pc)
-);
+        .clk(clk),
+        .exc(wb_exc),
+        .ertn_flush(ertn_flush),
+        .resetn(resetn),
+        .csr_re(csr_re),
+        .csr_wr_num(csr_wr_num),
+        .csr_rd_num(csr_rd_num),
+        .csr_we(csr_we),
+        .csr_wr_mask(csr_wr_mask),
+        .csr_wr_value(csr_wr_value),
+        .wb_pc(debug_wb_pc),
+        .csr_rd_value(csr_rd_value),
+        .csr_eentry_pc(exec_pc),
+        .csr_eertn_pc(ertn_pc),
+        .has_int(has_int)
+    );
+
+    cpu_timer localtimer(
+        .clk(clk),
+        .resetn(resetn),
+        .time_now(current_time)
+    );
 endmodule

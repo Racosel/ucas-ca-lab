@@ -16,12 +16,12 @@ module WBstate(
     output      [52:0] wb_rf_all,// {rf_we, rf_waddr, rf_wdata_reg}
     input              cancel_exc_ertn,//canceled by exception or ereturn
     input       [78:0] mem_csr_rf,//{csr_wr,csr_wr_num,csr_mask,csr_wr_value}
-    input       [1 :0] mem_exc_rf,//{syscall,ertn}
+    input       [6 :0] mem_exc_rf,//{syscall,ertn}
     output      [31:0] csr_wr_mask,
     output      [31:0] csr_wr_value,
     output      [13:0] csr_wr_num,
     output             csr_we,
-    output      [0 :0] wb_exc,//for extension
+    output      [5 :0] wb_exc,//for extension
     output             ertn_flush
 );
     wire        wb_ready_go;
@@ -33,7 +33,7 @@ module WBstate(
     reg  [4 :0] rf_waddr;
     reg         rf_we;
     reg [111:0] wb_csr_rf_reg;
-    reg  [5 :0] wb_exc_rf_reg;
+    reg  [6 :0] wb_exc_rf_reg;
     wire        wb_csr_wr;
 
     /* valid signals */
@@ -67,7 +67,7 @@ module WBstate(
 
     always @(posedge clk) begin
         if(~resetn)
-            wb_exc_rf_reg <= 6'b0;
+            wb_exc_rf_reg <= 7'b0;
         else//revise because bug in pipe line, alu result was sent to sram without reg,if exc, it takes two cycles to arrive in mem,make it error
             wb_exc_rf_reg <= mem_exc_rf;
     end
@@ -75,7 +75,7 @@ module WBstate(
     assign wb_rf_all  = {wb_csr_wr,csr_wr_num,rf_we, rf_waddr, rf_wdata};
     assign {wb_csr_wr,csr_wr_num,csr_wr_mask,csr_wr_value} = wb_csr_rf_reg;
     assign rf_wdata   = rf_wdata_reg;
-    assign wb_exc     = wb_exc_rf_reg[5:1] & {4{wb_valid}};
+    assign wb_exc     = wb_exc_rf_reg[6:1] & {4{wb_valid}};
     assign ertn_flush = wb_exc_rf_reg[0] & wb_valid;
     /* debug info */
     assign debug_wb_pc       = wb_pc;

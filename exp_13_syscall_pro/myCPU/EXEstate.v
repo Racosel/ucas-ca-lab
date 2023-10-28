@@ -61,6 +61,7 @@ module EXEstate(
     wire [31:0] exe_csr_rd_value;
     wire [31:0] timer_result;
     reg  [78:0] exe_csr_rf_reg;
+    wire        exe_adef;
 
     /* valid signals */
     assign exe_ready_go      = ~exe_alu_op[13] | div_complete;
@@ -155,8 +156,9 @@ module EXEstate(
         .complete(div_complete)
     );
     assign div_result = {32{exe_calc_h}} & divide_result | {32{~exe_calc_h}} & mod_result;
-    assign exe_result = {32{exe_alu_op[12]}} & mul_result | {32{exe_alu_op[13]}} & div_result 
-                        | {32{~exe_alu_op[12] & ~exe_alu_op[13]}} & exe_alu_result;
+    assign exe_result = (|exe_timer_reg) ? timer_result
+                        : ({32{exe_alu_op[12]}} & mul_result | {32{exe_alu_op[13]}} & div_result 
+                        | {32{~exe_alu_op[12] & ~exe_alu_op[13]}} & exe_alu_result);
     assign timer_result = {32{exe_timer_reg[0]}} & timer[31:0] | {32{exe_timer_reg[1]}} & timer[63:32];
     assign exe_fwd_all = {exe_csr_wr,exe_csr_wr_num,exe_res_from_mem, exe_rf_all, exe_result};
 

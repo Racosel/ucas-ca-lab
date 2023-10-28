@@ -25,8 +25,8 @@ module MEMstate(
     input       [31:0] data_sram_rdata,
     input              cancel_exc_ertn,//canceled by exception or ereturn
     input       [78:0] exe_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
-    input       [1 :0] exe_exc_rf,
-    output      [1 :0] mem_exc_rf,
+    input       [5 :0] exe_exc_rf,
+    output      [6 :0] mem_exc_rf,
     output reg  [78:0] mem_csr_rf//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
 );
 
@@ -45,7 +45,8 @@ module MEMstate(
     wire [3 :0] strb;
     wire [13:0] mem_csr_wr_num;
     wire        mem_csr_wr;
-    reg  [1 :0] mem_exc_rf_reg;
+    wire        mem_adef;
+    reg  [6 :0] mem_exc_rf_reg;
 
     // valid signals
     assign mem_ready_go     = 1'b1;
@@ -84,7 +85,7 @@ module MEMstate(
         if(~resetn)
             mem_exc_rf_reg <= 2'b0;
         else if(exe_to_mem_valid & mem_allowin)
-            mem_exc_rf_reg <= exe_exc_rf;
+            mem_exc_rf_reg <= {exe_exc_rf[5],mem_adef,exe_exc_rf[4:0]};
     end
 
     always @(posedge clk ) begin
@@ -105,7 +106,7 @@ module MEMstate(
                                  | {16{ld_h & ld_se & mem_result[15]}}
                                  | {16{ld_b & ld_se & mem_result[7]}};
     assign {ld_b, ld_h, ld_w, ld_se} = mem_all[6:3];
-    assign mem_we                    = exe_mem_all[7] & mem_valid & ~cancel_exc_ertn;
+    assign mem_we                    = exe_mem_all[7] & mem_valid & ~cancel_exc_ertn & ~mem_adef;
     assign {st_b, st_h, st_w}        = exe_mem_all[2:0];
     assign strb = {4{st_w}} | {4{st_h}} & {exe_result[1],exe_result[1],~exe_result[1],~exe_result[1]}
                   | {4{st_b}} & {exe_result[1:0]==2'b11,exe_result[1:0]==2'b10,
@@ -120,4 +121,6 @@ module MEMstate(
     assign mem_csr_wr_num = mem_csr_rf[77:64];
     assign mem_csr_wr = mem_csr_rf[78];
     assign mem_exc_rf = mem_exc_rf_reg;
+    assign mem_adef   = exe_mem_all[7] & (ld_h & alu_result[0] | ld_w & (|alu_result[1:0])) 
+                        | (|exe_mem_all[2:0]) & (st_h & alu_result[0] | st_w & (|alu_result[1:0]));
 endmodule

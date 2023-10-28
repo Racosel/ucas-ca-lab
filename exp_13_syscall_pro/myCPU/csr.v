@@ -14,8 +14,8 @@ module csr(
     input  [31:0] wb_pc,
     output [31:0] csr_rd_value,
     output [31:0] csr_eentry_pc,
-    output [31:0] csr_eertn_pc
-    output        has_int;
+    output [31:0] csr_eertn_pc,
+    output        has_int
 );
 
 
@@ -54,7 +54,7 @@ localparam  CSR_CRMD                = 14'b0,
             CSR_TCFG_EN             = 0,
             CSR_TCFG_PERIOD         = 1,
             CSR_TCFG_INITVAL_START  = 2,
-            CSR_TCFG_INITVAL_END    = 31
+            CSR_TCFG_INITVAL_END    = 31,
             CSR_TVAL                = 14'h42;
 //crmd start
 wire [31:0] csr_crmd;
@@ -116,7 +116,6 @@ wire [31:0] csr_tval;//tcfg is read only
 //tval begin
 reg  [31:0] timer_cnt;
 //tval end
-reg  [63:0] timer_calc;
 //ticlr start
 wire        csr_ticlr_clr;
 //ticlr end
@@ -129,7 +128,8 @@ wire [31:0] core_id;
 
 assign {int,adef,ale,brk,ine,sys} = exc;
 assign wb_ex = sys | break;
-assign wb_ecode = {6{int}} & 6'h0 | {6{adef}} & 6'h08 | {6{ale}} & 6'h09 | {6{sys}} & 6'hb | {6{break}} & 6'hc | {6{ine}} & 6'hd;
+assign wb_ecode = int ? 6'h0 : adef ? 6'h08 : ine ? 6'h0D : sys ? 6'hB : 
+                  brk ? 6'hc : 6'h9;
 assign wb_esubcode = 9'b0;
 assign hw_int_in = 8'b0;
 assign core_id = 32'b0;
@@ -217,7 +217,7 @@ always @(posedge clk ) begin
     else if(csr_we && csr_wr_num == CSR_TICLR && csr_wr_mask[CSR_TICLR_CLR] && csr_wr_value[CSR_TICLR_CLR])
         csr_estat_is[11] <= 1'b0;
     // csr_estat_is[11] <= 1'b0;
-    // csr_estat_is[12] <= 1'b0;
+    csr_estat_is[12] <= 1'b0;
     // csr_estat_is[12] <= ipi_int_in;//not achieved
 end
 always @(posedge clk ) begin
@@ -319,14 +319,6 @@ always @(posedge clk ) begin
 end
 assign csr_tval = timer_cnt;
 //tval end
-//timer_calc begin
-always @(posedge clk ) begin
-    if(~resetn)
-        timer_calc <= 64'b0;
-    else
-        timer_calc <= timer_calc + 1;
-end
-//timer_calc end
 assign csr_ticlr_clr = 1'b0;
 assign csr_rd_value = {32{csr_re}}
                     & ( {32{csr_rd_num == CSR_CRMD}} & csr_crmd

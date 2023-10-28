@@ -267,7 +267,7 @@ module IDstate(
         else if(br_taken_exe | cancel_exc_ertn)
             id_valid <= 1'b0;
         else if(id_allowin)begin
-            if(br_taken_id)//被除法指令阻塞而且id级发生需要写回的跳转
+            if(br_taken_id)//被除法指令阻塞�?�且id级发生需要写回的跳转
                 id_valid <= 1'b0;
             else
                 id_valid <= if_to_id_valid;
@@ -506,7 +506,7 @@ module IDstate(
     assign csr_num    = inst[23:10];
     assign csr_rd_num = {14{~inst_rdcntid}} & csr_num | {14{inst_rdcntid}} & 14'h40;
     assign csr_wr_num = csr_num;
-    assign id_exc_rf  = {has_int, if_exc_rf, inst_break, ine_id, inst_syscall, inst_ertn}
+    assign id_exc_rf  = {has_int, if_exc_rf, inst_break, ine_id, inst_syscall, inst_ertn};
     assign csr_mask = {32{inst_csrwr}} & {32{1'b1}} | {32{inst_csrxchg}} & rj_value;
     assign csr_wr_value = rkd_value;
     assign csr_rd = inst_csrrd | inst_csrxchg | inst_csrwr | inst_rdcntid;
