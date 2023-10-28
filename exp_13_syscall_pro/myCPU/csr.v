@@ -18,6 +18,7 @@ module csr(
     output        has_int;
 );
 
+
 localparam  CSR_CRMD                = 14'b0,
             CSR_CRMD_PLV_START      = 0,
             CSR_CRMD_PLV_END        = 1,

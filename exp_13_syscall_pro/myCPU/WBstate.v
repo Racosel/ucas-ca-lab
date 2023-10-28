@@ -27,6 +27,7 @@ module WBstate(
     wire        wb_ready_go;
     wire [31:0] rf_wdata;
     // reg         wb_valid;
+    
     reg  [31:0] wb_pc;
     reg  [31:0] rf_wdata_reg;
     reg  [4 :0] rf_waddr;

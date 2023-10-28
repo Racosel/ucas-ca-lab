@@ -29,7 +29,6 @@ module IFstate(
     wire [31:0] pc_seq;
     wire [31:0] pc_next;
     
-
     assign if_ready_go    = 1'b1;
     assign if_to_id_valid = if_valid & if_ready_go;
     assign if_allowin     = ~if_valid | if_ready_go & id_allowin | ertn_flush | exec_flush;     

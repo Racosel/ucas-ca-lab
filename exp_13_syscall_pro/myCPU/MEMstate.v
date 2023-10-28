@@ -30,6 +30,7 @@ module MEMstate(
     output reg  [78:0] mem_csr_rf//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
 );
 
+
     wire        mem_ready_go;
     wire [31:0] mem_result;
     // reg         mem_valid;

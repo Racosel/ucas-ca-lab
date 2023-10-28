@@ -35,7 +35,6 @@ module EXEstate(
     output      [5 :0] exe_exc_rf,
     output      [78:0] exe_csr_rf//{csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
 );
-
     wire        exe_ready_go;
     // reg         exe_valid;
     reg         inst_beq, inst_bne, inst_blt, inst_bltu, inst_bge, inst_bgeu;

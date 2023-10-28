@@ -19,6 +19,7 @@ module mycpu_top(
     output wire [ 4:0] debug_wb_rf_wnum,
     output wire [31:0] debug_wb_rf_wdata
 );
+
     wire        id_allowin;
     wire        exe_allowin;
     wire        mem_allowin;
