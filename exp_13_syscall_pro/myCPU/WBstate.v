@@ -17,12 +17,14 @@ module WBstate(
     input              cancel_exc_ertn,//canceled by exception or ereturn
     input       [78:0] mem_csr_rf,//{csr_wr,csr_wr_num,csr_mask,csr_wr_value}
     input       [6 :0] mem_exc_rf,//{syscall,ertn}
+    input       [31:0] mem_fault_vaddr,
     output      [31:0] csr_wr_mask,
     output      [31:0] csr_wr_value,
     output      [13:0] csr_wr_num,
     output             csr_we,
     output      [5 :0] wb_exc,//for extension
-    output             ertn_flush
+    output             ertn_flush,
+    output      [31:0] wb_fault_vaddr
 );
     wire        wb_ready_go;
     wire [31:0] rf_wdata;
@@ -34,8 +36,9 @@ module WBstate(
     reg         rf_we;
     reg [111:0] wb_csr_rf_reg;
     reg  [6 :0] wb_exc_rf_reg;
+    reg  [31:0] fault_vaddr_reg;
     wire        wb_csr_wr;
-
+    wire        truly_we;
     /* valid signals */
     assign wb_ready_go = 1'b1;
     assign wb_allowin  = ~wb_valid | wb_ready_go | cancel_exc_ertn;     
@@ -72,15 +75,25 @@ module WBstate(
             wb_exc_rf_reg <= mem_exc_rf;
     end
 
-    assign wb_rf_all  = {wb_csr_wr,csr_wr_num,rf_we, rf_waddr, rf_wdata};
+    always @(posedge clk ) begin
+        if(~resetn)
+            fault_vaddr_reg <= 32'b0;
+        else//revise because bug in pipe line, alu result was sent to sram without reg,if exc, it takes two cycles to arrive in mem,make it error
+            fault_vaddr_reg <= mem_fault_vaddr;
+    end
+
+    assign truly_we = rf_we & wb_valid & ~|wb_exc;
+
+    assign wb_rf_all  = {wb_csr_wr,csr_wr_num,truly_we, rf_waddr, rf_wdata};
     assign {wb_csr_wr,csr_wr_num,csr_wr_mask,csr_wr_value} = wb_csr_rf_reg;
     assign rf_wdata   = rf_wdata_reg;
-    assign wb_exc     = wb_exc_rf_reg[6:1] & {4{wb_valid}};
+    assign wb_exc     = wb_exc_rf_reg[6:1] & {6{wb_valid}};
     assign ertn_flush = wb_exc_rf_reg[0] & wb_valid;
+    assign wb_fault_vaddr = fault_vaddr_reg;
     /* debug info */
     assign debug_wb_pc       = wb_pc;
     assign debug_wb_rf_wdata = rf_wdata;
-    assign debug_wb_rf_we    = {4{rf_we & wb_valid}};
+    assign debug_wb_rf_we    = {4{truly_we}};
     assign debug_wb_rf_wnum  = rf_waddr;
 
     assign csr_we            = wb_csr_wr & wb_valid;

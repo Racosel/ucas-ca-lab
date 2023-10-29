@@ -25,9 +25,10 @@ module MEMstate(
     input       [31:0] data_sram_rdata,
     input              cancel_exc_ertn,//canceled by exception or ereturn
     input       [78:0] exe_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
-    input       [5 :0] exe_exc_rf,
-    output      [6 :0] mem_exc_rf,
-    output reg  [78:0] mem_csr_rf//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+    input       [5 :0] exe_exc_rf,//{INT,ADEF,BRK,INE,SYS,ertn}
+    output      [6 :0] mem_exc_rf,//{INT,ADEF,ALE,BRK,INE,SYS,ertn}
+    output reg  [78:0] mem_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+    output      [31:0] mem_fault_vaddr
 );
 
 
@@ -45,7 +46,7 @@ module MEMstate(
     wire [3 :0] strb;
     wire [13:0] mem_csr_wr_num;
     wire        mem_csr_wr;
-    wire        mem_adef;
+    wire        mem_ale;
     reg  [6 :0] mem_exc_rf_reg;
 
     // valid signals
@@ -77,7 +78,9 @@ module MEMstate(
             {mem_rf_we, mem_rf_waddr} <= exe_rf_all;
     end
     always @(posedge clk) begin
-        if(exe_to_mem_valid & mem_allowin)
+        if(~resetn)
+            {mem_res_from_mem, mem_all, rkd_value} <= 0;
+        else if(exe_to_mem_valid & mem_allowin)
             {mem_res_from_mem, mem_all, rkd_value} <= {exe_res_from_mem, exe_mem_all, exe_rkd_value};
     end
 
@@ -85,7 +88,7 @@ module MEMstate(
         if(~resetn)
             mem_exc_rf_reg <= 2'b0;
         else if(exe_to_mem_valid & mem_allowin)
-            mem_exc_rf_reg <= {exe_exc_rf[5],mem_adef,exe_exc_rf[4:0]};
+            mem_exc_rf_reg <= {exe_exc_rf[5:4],mem_ale,exe_exc_rf[3:0]};
     end
 
     always @(posedge clk ) begin
@@ -106,14 +109,14 @@ module MEMstate(
                                  | {16{ld_h & ld_se & mem_result[15]}}
                                  | {16{ld_b & ld_se & mem_result[7]}};
     assign {ld_b, ld_h, ld_w, ld_se} = mem_all[6:3];
-    assign mem_we                    = exe_mem_all[7] & mem_valid & ~cancel_exc_ertn & ~mem_adef;
+    assign mem_we                    = exe_mem_all[7] & mem_valid & ~cancel_exc_ertn & ~mem_ale;
     assign {st_b, st_h, st_w}        = exe_mem_all[2:0];
     assign strb = {4{st_w}} | {4{st_h}} & {exe_result[1],exe_result[1],~exe_result[1],~exe_result[1]}
                   | {4{st_b}} & {exe_result[1:0]==2'b11,exe_result[1:0]==2'b10,
                                  exe_result[1:0]==2'b01,exe_result[1:0]==2'b00};
     /* sram instantiation */
-    assign data_sram_en    = (exe_res_from_mem | mem_we) & ~(|mem_exc_rf_reg);
-    assign data_sram_we    = {4{mem_we}} & strb & ~(|mem_exc_rf_reg);
+    assign data_sram_en    = (exe_res_from_mem | mem_we) & ~((|mem_exc_rf_reg[3:0]) | mem_ale | (|mem_exc_rf_reg[6:5]));
+    assign data_sram_we    = {4{mem_we & ~(|mem_exc_rf_reg)}} & strb ;
     assign data_sram_addr  = {exe_result[31:2],2'b0};
     assign data_sram_wdata = {32{st_b}} & {4{exe_rkd_value[7:0]}}
                              | {32{st_h}} & {2{exe_rkd_value[15:0]}}
@@ -121,6 +124,8 @@ module MEMstate(
     assign mem_csr_wr_num = mem_csr_rf[77:64];
     assign mem_csr_wr = mem_csr_rf[78];
     assign mem_exc_rf = mem_exc_rf_reg;
-    assign mem_adef   = exe_mem_all[7] & (ld_h & alu_result[0] | ld_w & (|alu_result[1:0])) 
-                        | (|exe_mem_all[2:0]) & (st_h & alu_result[0] | st_w & (|alu_result[1:0]));
+    assign mem_ale   = exe_res_from_mem & (exe_mem_all[5] & exe_result[0] | exe_mem_all[4] & (|exe_result[1:0])) 
+                       | (exe_mem_all[7]) & (st_h & exe_result[0] | st_w & (|exe_result[1:0]));
+    // assign mem_ale = 2'b0;
+    assign mem_fault_vaddr = alu_result;
 endmodule

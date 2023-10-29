@@ -11,7 +11,9 @@ module csr(
     input         csr_we,
     input  [31:0] csr_wr_mask,
     input  [31:0] csr_wr_value,
+    input  [31:0] badv_input,
     input  [31:0] wb_pc,
+    input  [31:0] wb_fault_vaddr,
     output [31:0] csr_rd_value,
     output [31:0] csr_eentry_pc,
     output [31:0] csr_eertn_pc,
@@ -19,21 +21,22 @@ module csr(
 );
 
 
-localparam  CSR_CRMD                = 14'b0,
+localparam  CSR_CRMD                = 14'h0,
             CSR_CRMD_PLV_START      = 0,
             CSR_CRMD_PLV_END        = 1,
             CSR_CRMD_IE             = 2,
-            CSR_PRMD                = 14'b1,
+            CSR_PRMD                = 14'h1,
             CSR_PRMD_PPLV_START     = 0,
             CSR_PRMD_PPLV_END       = 1,
             CSR_PRMD_PIE            = 2,
-            CSR_ECFG                = 14'b100,
+            CSR_ECFG                = 14'h4,
             CSR_ECFG_LIE_START      = 0,
             CSR_ECFG_LIE_END        = 12,
             CSR_ESTAT               = 14'h5,
             CSR_ESTAT_IS10_START    = 0,
             CSR_ESTAT_IS10_END      = 1,
             CSR_ERA                 = 14'h6,
+            CSR_BADV                = 14'h7,
             CSR_ERA_PC_START        = 0,
             CSR_ERA_PC_END          = 31,
             CSR_EENTRY              = 14'hc,
@@ -46,7 +49,7 @@ localparam  CSR_CRMD                = 14'b0,
             CSR_SAVE_DATA_START     = 0,
             CSR_SAVE_DATA_END       = 31,
             CSR_TICLR               = 14'h44,
-            CSR_TICLR_CLR           = 1,
+            CSR_TICLR_CLR           = 0,
             CSR_TID                 = 14'h40,
             CSR_TID_TID_START       = 0,
             CSR_TID_TID_END         = 31,
@@ -125,16 +128,17 @@ wire        break;
 //non-sense wire
 wire [7 :0] hw_int_in;
 wire [31:0] core_id;
+wire        wb_ex_addr_err;
 
 assign {int,adef,ale,brk,ine,sys} = exc;
-assign wb_ex = sys | break;
+assign wb_ex = int | adef | ale | brk | ine | sys;
 assign wb_ecode = int ? 6'h0 : adef ? 6'h08 : ine ? 6'h0D : sys ? 6'hB : 
                   brk ? 6'hc : 6'h9;
 assign wb_esubcode = 9'b0;
 assign hw_int_in = 8'b0;
 assign core_id = 32'b0;
 assign has_int = ((|(csr_estat_is[12:0] & csr_ecfg_lie[12:0])) & csr_crmd_ie);
-
+assign wb_ex_addr_err = adef | ale;
 //crmd start
 always @(posedge clk ) begin
     if(~resetn)
@@ -212,9 +216,13 @@ always @(posedge clk ) begin
     csr_estat_is[9:2] = hw_int_in[7:0]; // not achieved
     csr_estat_is[10] <= 1'b0;
 
-    if(csr_tcfg_en & timer_cnt[31:0] == 32'b0)//not achieved
+    if(~resetn)
+        csr_estat_is[11] <= 1'b0;
+    else if(csr_tcfg_en && timer_cnt[31:0] == 32'b0)
         csr_estat_is[11] <= 1'b1;
-    else if(csr_we && csr_wr_num == CSR_TICLR && csr_wr_mask[CSR_TICLR_CLR] && csr_wr_value[CSR_TICLR_CLR])
+    else if(csr_we & (csr_wr_num == CSR_TICLR)
+                   & csr_wr_mask[CSR_TICLR_CLR] 
+                   & csr_wr_value[CSR_TICLR_CLR])
         csr_estat_is[11] <= 1'b0;
     // csr_estat_is[11] <= 1'b0;
     csr_estat_is[12] <= 1'b0;
@@ -241,14 +249,20 @@ always @(posedge clk ) begin
 end
 assign csr_era = csr_era_pc;
 //era end
-
+//badv start
+always @(posedge clk ) begin
+    if(wb_ex & wb_ex_addr_err)
+        csr_badv_pc <= (adef)? wb_pc: wb_fault_vaddr;//not support virtual memory
+end
+assign csr_badv = csr_badv_pc;
+//badv end
 //eentry start
 always @(posedge clk ) begin
     if(~resetn)
         csr_eentry_va <= 20'b0;
     else if(csr_we && csr_wr_num == CSR_EENTRY)
         csr_eentry_va <= csr_wr_mask[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START] & csr_wr_value[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START]
-                         | csr_wr_mask[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START] & csr_eentry_va;
+                         | ~csr_wr_mask[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START] & csr_eentry_va;
 end
 assign csr_eentry = {csr_eentry_va,12'b0};
 //eentry end
@@ -282,7 +296,7 @@ always @(posedge clk ) begin
     if(~resetn)
         csr_tid_tid <= core_id;
     else if(csr_we && csr_wr_num == CSR_TID)
-        csr_tid_tid <= csr_wr_mask[CSR_TID_TID_END:CSR_TID_TID_START] & csr_wr_value[CSR_TID_TID_END:CSR_TID_TID_END]
+        csr_tid_tid <= csr_wr_mask[CSR_TID_TID_END:CSR_TID_TID_START] & csr_wr_value[CSR_TID_TID_END:CSR_TID_TID_START]
                        | ~csr_wr_mask[CSR_TID_TID_END:CSR_TID_TID_START] & csr_tid_tid;
 end
 assign csr_tid = csr_tid_tid;
@@ -325,6 +339,7 @@ assign csr_rd_value = {32{csr_re}}
                         | {32{csr_rd_num == CSR_PRMD}} & csr_prmd
                         | {32{csr_rd_num == CSR_ECFG}} & csr_ecfg
                         | {32{csr_rd_num == CSR_ESTAT}} & csr_estat
+                        | {32{csr_rd_num == CSR_BADV}} & csr_badv
                         | {32{csr_rd_num == CSR_ERA}}   & csr_era
                         | {32{csr_rd_num == CSR_EENTRY}} & csr_eentry
                         | {32{csr_rd_num == CSR_SAVE0}} & csr_save0_data

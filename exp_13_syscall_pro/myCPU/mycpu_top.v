@@ -84,11 +84,13 @@ module mycpu_top(
 
     wire [6 :0] mem_exc_rf;
     wire [78:0] mem_csr_rf;//mem exc
+    wire [31:0] mem_fault_vaddr;
 
     wire [31:0] csr_wr_mask;
     wire [31:0] csr_wr_value;
     wire [13:0] csr_wr_num;
     wire        csr_we;//wb exc
+    wire [31:0] wb_fault_vaddr;
 
     wire [5 :0] wb_exc;
     assign exec_flush      = |wb_exc;
@@ -228,7 +230,8 @@ module mycpu_top(
         .exe_csr_rf(exe_csr_rf),
         .exe_exc_rf(exe_exc_rf),
         .mem_exc_rf(mem_exc_rf),
-        .mem_csr_rf(mem_csr_rf)
+        .mem_csr_rf(mem_csr_rf),
+        .mem_fault_vaddr(mem_fault_vaddr)
     ) ;
 
     WBstate wbstate(
@@ -251,12 +254,14 @@ module mycpu_top(
         .cancel_exc_ertn(cancel_exc_ertn),
         .mem_csr_rf(mem_csr_rf),
         .mem_exc_rf(mem_exc_rf),
+        .mem_fault_vaddr(mem_fault_vaddr),
         .csr_wr_mask(csr_wr_mask),
         .csr_wr_value(csr_wr_value),
         .csr_wr_num(csr_wr_num),
         .csr_we(csr_we),
         .wb_exc(wb_exc),
-        .ertn_flush(ertn_flush)
+        .ertn_flush(ertn_flush),
+        .wb_fault_vaddr(wb_fault_vaddr)
     );
 
     csr csr_reg(
@@ -271,6 +276,7 @@ module mycpu_top(
         .csr_wr_mask(csr_wr_mask),
         .csr_wr_value(csr_wr_value),
         .wb_pc(debug_wb_pc),
+        .wb_fault_vaddr(wb_fault_vaddr),
         .csr_rd_value(csr_rd_value),
         .csr_eentry_pc(exec_pc),
         .csr_eertn_pc(ertn_pc),
