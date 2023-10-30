@@ -228,7 +228,7 @@ always @(posedge clk ) begin
         csr_eentry_va <= 20'b0;
     else if(csr_we && csr_wr_num == CSR_EENTRY)
         csr_eentry_va <= csr_wr_mask[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START] & csr_wr_value[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START]
-                         | csr_wr_mask[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START] & csr_eentry_va;
+                         | ~csr_wr_mask[CSR_EENTRY_VA_END:CSR_EENTRY_VA_START] & csr_eentry_va;
 end
 assign csr_eentry = {csr_eentry_va,12'b0};
 //eentry end
