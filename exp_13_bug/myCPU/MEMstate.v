@@ -115,8 +115,10 @@ module MEMstate(
                   | {4{st_b}} & {exe_result[1:0]==2'b11,exe_result[1:0]==2'b10,
                                  exe_result[1:0]==2'b01,exe_result[1:0]==2'b00};
     /* sram instantiation */
-    assign data_sram_en    = (exe_res_from_mem | mem_we) & ~((|mem_exc_rf_reg[3:0]) | mem_ale | (|mem_exc_rf_reg[6:5]));
-    assign data_sram_we    = {4{mem_we & ~(|mem_exc_rf_reg)}} & strb ;
+    // assign data_sram_en    = (exe_res_from_mem | mem_we) & ~((|mem_exc_rf_reg[3:0]) | mem_ale | (|mem_exc_rf_reg[6:5]));
+    // assign data_sram_we    = {4{mem_we & ~(|mem_exc_rf_reg)}} & strb ;
+    assign data_sram_en    = exe_res_from_mem | mem_we;
+    assign data_sram_we    = {4{mem_we}} & strb ;
     assign data_sram_addr  = {exe_result[31:2],2'b0};
     assign data_sram_wdata = {32{st_b}} & {4{exe_rkd_value[7:0]}}
                              | {32{st_h}} & {2{exe_rkd_value[15:0]}}
