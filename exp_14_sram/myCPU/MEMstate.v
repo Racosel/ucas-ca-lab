@@ -70,6 +70,8 @@ module MEMstate(
             mem_valid <= 1'b0;
         else if(mem_allowin & exe_ready_go)
             mem_valid <= exe_to_mem_valid; 
+        else
+            mem_valid <= mem_valid;
     end
 
     // exestate <-> memstate
@@ -95,7 +97,7 @@ module MEMstate(
     end
 
     always @(posedge clk) begin
-        if(~resetn)
+        if(~resetn | (|mem_exc_rf_reg))
             mem_exc_rf_reg <= 6'b0;
         else if(mem_allowin & exe_ready_go)
             mem_exc_rf_reg <= exe_exc_rf;

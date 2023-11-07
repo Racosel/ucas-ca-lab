@@ -78,8 +78,8 @@ module EXEstate(
 
     /* valid signals */
     assign exe_ready_go      = (~exe_alu_op[13] | div_complete) 
-                               & ((mem_handled & mem_allowin | data_sram_addr_ok & mem_allowin) | ~exe_res_from_mem & ~mem_we) //need mem
-                               & exe_valid;
+                               & ((mem_handled & mem_allowin | data_sram_addr_ok & mem_allowin) | ~exe_res_from_mem & ~mem_we 
+                                   | mem_exc_flush | cancel_exc_ertn | (|exe_exc_rf) ); //need mem
     assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin | cancel_exc_ertn;
     assign exe_to_mem_valid  = exe_valid & exe_ready_go;
     always @(posedge clk) begin
@@ -200,12 +200,12 @@ module EXEstate(
     assign {st_b, st_h, st_w}        = exe_mem_all[2:0];
     // assign data_sram_en    = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_exc_flush);//(|mem_exc_rf[6:0]));
     assign data_sram_wr    = mem_we;
-    assign data_sram_req   = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_exc_flush) & ~mem_handled & mem_allowin & exe_valid;//(|mem_exc_rf[6:0]))
+    assign data_sram_req   = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_exc_flush) & ~mem_handled & exe_valid;//(|mem_exc_rf[6:0]))
     assign data_sram_size  = {st_w,st_h};
     assign data_sram_wstrb = {4{st_w}} | {4{st_h}} & {exe_result[1],exe_result[1],~exe_result[1],~exe_result[1]}
                   | {4{st_b}} & {exe_result[1:0]==2'b11,exe_result[1:0]==2'b10,
                                  exe_result[1:0]==2'b01,exe_result[1:0]==2'b00};
-    assign data_sram_addr  = {exe_result[31:2],2'b0};
+    assign data_sram_addr  = exe_result;
     assign data_sram_wdata = {32{st_b}} & {4{exe_rkd_value[7:0]}}
                              | {32{st_h}} & {2{exe_rkd_value[15:0]}}
                              | {32{st_w}} & exe_rkd_value;
