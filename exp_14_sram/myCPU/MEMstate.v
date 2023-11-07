@@ -33,7 +33,7 @@ module MEMstate(
     //exc
     input              cancel_exc_ertn,//canceled by exception or ereturn
     input       [78:0] exe_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
-    input       [5 :0] exe_exc_rf,//{INT,ADEF,BRK,INE,SYS,ertn}
+    input       [6 :0] exe_exc_rf,//{INT,ADEF,BRK,INE,SYS,ertn}
     output      [6 :0] mem_exc_rf,//{INT,ADEF,ALE,BRK,INE,SYS,ertn}
     output reg  [78:0] mem_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
     output      [31:0] mem_fault_vaddr,
@@ -97,7 +97,7 @@ module MEMstate(
     end
 
     always @(posedge clk) begin
-        if(~resetn | (|mem_exc_rf_reg))
+        if(~resetn)
             mem_exc_rf_reg <= 6'b0;
         else if(mem_allowin & exe_ready_go)
             mem_exc_rf_reg <= exe_exc_rf;
@@ -134,7 +134,7 @@ module MEMstate(
     assign mem_ld_not_handled = mem_res_from_mem & ~data_sram_data_ok;
     // assign mem_ale = 2'b0;
     assign mem_fault_vaddr = alu_result;
-    assign mem_exc_flush = |mem_exc_rf_reg;
+    assign mem_exc_flush = (|mem_exc_rf_reg) & mem_valid;
     assign mem_csr_wr_num = mem_csr_rf[77:64];
     assign mem_csr_wr = mem_csr_rf[78];
     assign mem_exc_rf = mem_exc_rf_reg;

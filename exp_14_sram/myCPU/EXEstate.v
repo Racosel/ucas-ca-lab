@@ -85,7 +85,7 @@ module EXEstate(
     always @(posedge clk) begin
         if(~resetn)
             exe_valid <= 1'b0;
-        else if(br_taken_exe | cancel_exc_ertn)
+        else if(br_taken_exe | cancel_exc_ertn | mem_exc_flush)
             exe_valid <= 1'b0;
         else if(exe_allowin)
             exe_valid <= id_to_exe_valid; 
