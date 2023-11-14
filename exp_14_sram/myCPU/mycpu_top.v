@@ -105,7 +105,6 @@ module mycpu_top(
     wire [5 :0] wb_exc;
     assign exec_flush      = |wb_exc;
     assign cancel_exc_ertn = ertn_flush | exec_flush;
-    assign inst_sram_wr = 1'b0;
     // assign cancel_exc_ertn_mem = cancel_exc_ertn | (|mem_exc_rf);
     IFstate ifstate(
         .clk(clk),

@@ -40,17 +40,18 @@ module IFstate(
     reg         if_handled;
     reg         if_valid;
     reg  [31:0] if_pc_reg;
+    reg  [31:0] if_inst_reg;
     reg         if_gone;
     wire        if_ready_go;
     wire        if_allowin;
-    reg         unused_handle;
     // reg         if_valid;
     wire [31:0] pc_seq;
     wire [31:0] pre_if_pc_next;
     
 
-    assign pre_if_allowin  = pre_if_ready_go & if_allowin;//not received request or has gone
-    assign pre_if_ready_go = (inst_sram_req & inst_sram_addr_ok) | pre_if_handled;//request received
+    assign pre_if_allowin  = pre_if_handled & if_allowin 
+                             | if_allowin & inst_sram_addr_ok;//not received request or has gone
+    assign pre_if_ready_go = inst_sram_addr_ok | pre_if_handled;//request received
     assign if_allowin      = if_ready_go & id_allowin | if_gone;
     assign if_ready_go     = (inst_sram_data_ok | if_handled) & ~if_gone;
     assign if_to_id_valid  = if_valid & if_ready_go;
@@ -58,21 +59,10 @@ module IFstate(
     always @(posedge clk ) begin
         if(~resetn)
             pre_if_handled <= 1'b0;
-        else if(if_allowin | ((pre_if_handled | inst_sram_req & data_sram_addr_ok) & (br_taken_exe | br_taken_id | exec_flush | ertn_flush )))
+        else if(pre_if_allowin)
             pre_if_handled <= 1'b0;
-        else if((inst_sram_addr_ok & inst_sram_req) & ~(br_taken_exe | br_taken_id | exec_flush | ertn_flush))
+        else if(inst_sram_addr_ok & inst_sram_req)
             pre_if_handled <= 1'b1;
-    end
-
-    always @(posedge clk ) begin
-        if(~resetn)
-            unused_handle <= 1'b0;
-        else if((pre_if_handled | inst_sram_req & data_sram_addr_ok) & (br_taken_exe | br_taken_id | exec_flush | ertn_flush ))
-            unused_handle <= 1'b1;
-        else if(pre_if_ready_go & if_allowin)
-            unused_handle <= 1'b0;
-        else
-            unused_handle <= unused_handle;
     end
 
     always @(posedge clk ) begin
@@ -87,10 +77,10 @@ module IFstate(
     always @(posedge clk ) begin
         if(~resetn)
             pre_if_valid <= 1'b0;
-        else if((pre_if_handled | inst_sram_req & inst_sram_addr_ok) & (br_taken_exe | br_taken_id | exec_flush | ertn_flush) & ~if_allowin)
-            pre_if_valid <= 1'b0;
         else if(~pre_if_handled)//request not received, always valid
             pre_if_valid <= 1'b1;
+        else if(pre_if_handled & (br_taken_exe | br_taken_id | exec_flush | ertn_flush) & ~if_allowin)
+            pre_if_valid <= 1'b0;
     end
 
     always @(posedge clk) begin
@@ -120,7 +110,7 @@ module IFstate(
 
     /* Instruction Fetch: use inst_sram */
     // assign inst_sram_en    = if_allowin & resetn;
-    assign inst_sram_req = ~pre_if_handled & (if_allowin | id_allowin);
+    assign inst_sram_req = ~pre_if_handled & if_allowin;
     assign inst_sram_wr = 1'b0;
     assign inst_sram_size = 2'b10;
     assign inst_sram_wstrb = 4'b0;
