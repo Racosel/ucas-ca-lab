@@ -1,480 +1,470 @@
-module mycpu_top(
-    input  wire        clk,
-    input  wire        resetn,
-    // inst sram interface
-    output wire [3 :0] arid,
-    output wire [31:0] araddr,
-    output wire [7 :0] arlen,
-    output wire [2 :0] arsize,
-    output wire [1 :0] arburst,
-    output wire [1 :0] arlock,
-    output wire [3 :0] arcache,
-    output wire [2 :0] arprot,
-    output wire        arvalid,
-    input  wire        arready,
-                
-    output wire [3 :0] rid,
-    input  wire [31:0] rdata,
-    input  wire [1 :0] cpu_rresp,
-    input  wire        rlast,
-    input  wire        rvalid,
-    output wire        rready,
-               
-    output wire [3 :0] awid,
-    output wire [31:0] awaddr,
-    output wire [7 :0] awlen,
-    output wire [2 :0] awsize,
-    output wire [1 :0] awburst,
-    output wire [1 :0] awlock,
-    output wire [3 :0] awcache,
-    output wire [2 :0] awprot,
-    output wire        awvalid,
-    input  wire        awready,
-    
-    output wire [3 :0] wid,
-    output wire [31:0] wdata,
-    output wire [3 :0] wstrb,
-    output wire        wlast,
-    output wire        wvalid,
-    input  wire        wready,
-    
-    input  wire [3 :0] bid,
-    input  wire [1 :0] bresp,
-    input  wire        bvalid,
-    output wire        bready,
-    // trace debug interface
-    output wire [31:0] debug_wb_pc,
-    output wire [ 3:0] debug_wb_rf_we,
-    output wire [ 4:0] debug_wb_rf_wnum,
-    output wire [31:0] debug_wb_rf_wdata
-);
-    localparam  WAIT    = 1'b0,
-                READY   = 1'b1;
+module mycpu_top (
+/*
+ *	THIS MODULE: wires (mycpu_top::in/out)
+ */
+	input  wire        aclk,
+	input  wire        aresetn,
+	
+	output wire [ 3:0] arid,
+	output wire [31:0] araddr,
+	output wire [ 7:0] arlen,
+	output wire [ 2:0] arsize,
+	output wire [ 1:0] arburst,
+	output wire [ 1:0] arlock,
+	output wire [ 3:0] arcache,
+	output wire [ 2:0] arprot,
+	output wire        arvalid,
+	input  wire        arready,
 
-    wire        inst_sram_wr;
-    wire [1 :0] inst_sram_size;
-    wire [3 :0] inst_sram_wstrb;
-    wire [31:0] inst_sram_wdata;
-    //useless information
-    wire        inst_sram_req;
-    wire [31:0] inst_sram_addr;
-    reg         inst_sram_req_reg;
-    reg  [31:0] inst_sram_addr_reg;
-    reg         inst_sram_handled;
-    wire        inst_sram_addr_ok;
-    //stage 1
-    wire        inst_sram_data_ok;
-    wire [31:0] inst_sram_rdata;
-    //stage 2
+	input  wire [ 3:0] rid,
+	input  wire [31:0] rdata,
+	input  wire [ 1:0] rresp,
+	input  wire        rlast,
+	input  wire        rvalid,
+	output wire        rready,
 
-    wire        data_sram_req;
-    wire        data_sram_wr;
-    wire [ 1:0] data_sram_size;
-    wire [ 3:0] data_sram_wstrb;
-    wire [31:0] data_sram_addr;
-    wire [31:0] data_sram_wdata;
-    wire        data_sram_addr_ok;
-    //to handle information
-    reg         data_sram_wr_reg;
-    reg  [ 1:0] data_sram_size_reg;
-    reg  [ 3:0] data_sram_wstrb_reg;
-    reg  [31:0] data_sram_addr_reg;
-    reg  [31:0] data_sram_wdata_reg;
-    reg         data_sram_handled;
-    //information needed
-    wire        data_sram_data_ok;
-    wire [31:0] data_sram_rdata;
-    //next stage
+	output wire [ 3:0] awid,
+	output wire [31:0] awaddr,
+	output wire [ 7:0] awlen,
+	output wire [ 2:0] awsize,
+	output wire [ 1:0] awburst,
+	output wire [ 1:0] awlock,
+	output wire [ 3:0] awcache,
+	output wire [ 2:0] awprot,
+	output wire        awvalid,
+	input  wire        awready,
 
-    //machines for read and write
-    reg         read_req_status;
-    reg         read_data_status;
-    reg         write_req_status;
-    reg         write_data_status;
-    //regs needed to support
+	output wire [ 3:0] wid,
+	output wire [31:0] wdata,
+	output wire [ 3:0] wstrb,
+	output wire        wlast,
+	output wire        wvalid,
+	input  wire        wready,
 
-    assign arid_choose = ~data_sram_handled;
-
-    always @(posedge clk ) begin
-        if(~resetn)
-            read_req_status <= WAIT;
-        else if(read_req_status == WAIT && (~inst_sram_handled | ~data_sram_handled))
-            read_req_status <= READY;
-        else if(read_req_status == READY && arready)
-            read_req_status <= WAIT;
-    end
-
-    always @(posedge clk ) begin
-        if(~resetn)
-            read_data_status <= WAIT;
-        else if(read_data_status == WAIT && read_req_status == READ && arready)
-            read_data_status <= READY;
-        else if(read_data_status == READY )
-    end
-
-    always @(posedge clk ) begin
-        if(~resetn)
-            inst_sram_handled <= 1;
-        else if(inst_sram_addr_ok && inst_sram_req)
-            inst_sram_handled <= 0;
-        else if(inst_sram_data_ok)
-            inst_sram_handled <= 1;
-    end
-
-    always @(posedge clk ) begin
-        if(~resetn)
-            data_sram_handled <= 1;
-        else if(data_sram_addr_ok && data_sram_req)
-            data_sram_handled <= 0;
-        else if(data_sram_data_ok)
-            data_sram_handled <= 1;
-    end
-
-    always @(posedge clk ) begin
-        
-    end
-
-    always @(posedge clk ) begin
-        
-    end
-
-
-    //fixed information
-    assign arlen = 0;
-    assign arburst = 0x1;
-    assign arlock = 0;
-    assign arcache = 0;
-    assign arprot = 0;
-    assign awid = 1;
-    assign awlen = 0;
-    assign awburst = 0x1;
-    assign awlock = 0;
-    assign awcache = 0
-    assign awprot = 0;
-    assign wlast = 1;
-    //fixed information
-endmodule
-
-module mycpu_core(
-    input  wire        clk,
-    input  wire        resetn,
-    // inst sram interface
-    output wire        inst_sram_req,
-    output wire        inst_sram_wr,
-    output wire [ 1:0] inst_sram_size,
-    output wire [ 3:0] inst_sram_wstrb,
-    output wire [31:0] inst_sram_addr,
-    output wire [31:0] inst_sram_wdata,
-    input wire         inst_sram_addr_ok,
-    input wire         inst_sram_data_ok,
-    input  wire [31:0] inst_sram_rdata,
-    // data sram interface
-    output wire        data_sram_req,
-    output wire        data_sram_wr,
-    output wire [ 1:0] data_sram_size,
-    output wire [ 3:0] data_sram_wstrb,
-    output wire [31:0] data_sram_addr,
-    output wire [31:0] data_sram_wdata,
-    input  wire        data_sram_addr_ok,
-    input  wire        data_sram_data_ok,
-    input  wire [31:0] data_sram_rdata, 
-    // trace debug interface
-    output wire [31:0] debug_wb_pc,
-    output wire [ 3:0] debug_wb_rf_we,
-    output wire [ 4:0] debug_wb_rf_wnum,
-    output wire [31:0] debug_wb_rf_wdata
+	input  wire [ 3:0] bid,
+	input  wire [ 1:0] bresp,
+	input  wire        bvalid,
+	output wire        bready,
+	
+	output wire [31:0] debug_wb_pc,
+	output wire [ 3:0] debug_wb_rf_we,
+	output wire [ 4:0] debug_wb_rf_wnum,
+	output wire [31:0] debug_wb_rf_wdata
 );
 
-    wire        id_allowin;
-    wire        exe_allowin;
-    wire        mem_allowin;
-    wire        wb_allowin;
+/*
+ *	CPU: wires (cpu_core::in/out)
+ */
 
-    wire        exe_ready_go;
+	wire        cpu_inst_sram_req;
+	wire        cpu_inst_sram_wr;
+	wire [ 1:0] cpu_inst_sram_size;
+	wire [ 3:0] cpu_inst_sram_wstrb;
+	wire [31:0] cpu_inst_sram_addr;
+	wire [31:0] cpu_inst_sram_wdata;
+	wire        cpu_inst_sram_addr_ok;
+	wire        cpu_inst_sram_data_ok;
+	wire [31:0] cpu_inst_sram_rdata;
 
-    wire        if_to_id_valid;
-    wire        id_to_exe_valid;
-    wire        exe_to_mem_valid;
-    wire        mem_to_wb_valid;
+	wire        cpu_data_sram_req;
+	wire        cpu_data_sram_wr;
+	wire [ 1:0] cpu_data_sram_size;
+	wire [ 3:0] cpu_data_sram_wstrb;
+	wire [31:0] cpu_data_sram_addr;
+	wire [31:0] cpu_data_sram_wdata;
+	wire        cpu_data_sram_addr_ok;
+	wire        cpu_data_sram_data_ok;
+	wire [31:0] cpu_data_sram_rdata;
 
-    wire [31:0] if_pc;
-    wire [31:0] id_pc;
-    wire [31:0] exe_pc;
-    wire [31:0] mem_pc;
+	wire [31:0] cpu_debug_wb_pc;
+	wire [ 3:0] cpu_debug_wb_rf_we;
+	wire [ 4:0] cpu_debug_wb_rf_wnum;
+	wire [31:0] cpu_debug_wb_rf_wdata;
 
-    wire [5 :0] id_rf_all;
-    // wire [5 :0] exe_rf_all;
-    wire [53:0] exe_fwd_all;
-    wire [53:0] mem_rf_all;
-    wire [52:0] wb_rf_all;
+/*
+ *	THIS MODULE: parameters
+ */
 
-    wire        id_res_from_mem;
-    wire        exe_res_from_mem;
+	parameter INIT    	= 4'b0001,
+			  WAIT 		= 4'b0010,
+			  WAIT2  	= 4'b0100,
+			  DONE    	= 4'b1000;
 
-    wire [7 :0] id_mem_all;
-    wire [7 :0] exe_mem_all;
-    
-    wire [31:0] id_rkd_value;
-    wire [31:0] exe_rkd_value;
+	parameter ID_INST	= 4'b0000,
+			  ID_DATA	= 4'b0001;
 
+/*
+ * 	THIS MODULE: State Machine registers
+ */
 
-    wire        br_taken_id;
-    wire        br_taken_exe;
-    wire [31:0] br_target_id;
-    wire [31:0] br_target_exe;
-    wire [5 :0] br_rf_all_id;
-    // wire [31:0] id_to_if_pc_next;
-    wire [31:0] if_inst;
-    wire [80:0] id_alu_data_all;
-    wire [31:0] exe_result;
+	reg [ 3:0] ar_state, r_state, w_state, b_state;
+	
+	reg [ 3:0] arid_r;
+	reg [31:0] araddr_r;
+	reg [ 7:0] arlen_r;
+	reg [ 2:0] arsize_r;
+	reg [ 1:0] arburst_r;
+	reg [ 1:0] arlock_r;
+	reg [ 3:0] arcache_r;
+	reg [ 2:0] arprot_r;
 
-    wire if_valid, id_valid, exe_valid, mem_valid, wb_valid;
-    wire [31:0] ertn_pc;
-    wire [31:0] exec_pc;
-    wire        ertn_flush;
-    wire        exec_flush;
-    wire        cancel_exc_ertn;
-    // wire        cancel_exc_ertn_mem;
-    wire        if_exc_rf;//if exc
+	reg [ 3:0] rid_r;
+	reg [31:0] rdata_r;
 
-    wire [31:0] csr_rd_value;
-    wire        csr_re;
-    wire [13:0] csr_rd_num;
-    wire [5 :0] id_exc_rf;
-    wire [78:0] id_csr_rf;//id exc
-    wire [1 :0] id_timer_rf;
-    wire        has_int;
+	reg [ 3:0] awid_r;
+	reg [31:0] awaddr_r;
+	reg [ 7:0] awlen_r;
+	reg [ 2:0] awsize_r;
+	reg [ 1:0] awburst_r;
+	reg [ 1:0] awlock_r;
+	reg [ 3:0] awcache_r;
+	reg [ 2:0] awprot_r;
 
-    wire [63:0] current_time;
-    wire [6 :0] exe_exc_rf;
-    wire [78:0] exe_csr_rf;//exe exc
+	reg [ 3:0] wid_r;
+	reg [31:0] wdata_r;
+	reg [ 3:0] wstrb_r;
+	reg        wlast_r;
 
-    wire [6 :0] mem_exc_rf;
-    wire [78:0] mem_csr_rf;//mem exc
-    wire [31:0] mem_fault_vaddr;
-
-    wire [31:0] csr_wr_mask;
-    wire [31:0] csr_wr_value;
-    wire [13:0] csr_wr_num;
-    wire        csr_we;//wb exc
-    wire [31:0] wb_fault_vaddr;
-    wire        mem_exc_flush;
-    wire [5 :0] wb_exc;
-    assign exec_flush      = |wb_exc;
-    assign cancel_exc_ertn = ertn_flush | exec_flush;
-    assign inst_sram_wr = 1'b0;
-    // assign cancel_exc_ertn_mem = cancel_exc_ertn | (|mem_exc_rf);
-    IFstate ifstate(
-        .clk(clk),
-        .resetn(resetn),
-        .if_valid_rf(if_valid),
-
-        .inst_sram_req(inst_sram_req),
-        .inst_sram_wr(inst_sram_wr),
-        .inst_sram_size(inst_sram_size),
-        .inst_sram_wstrb(inst_sram_wstrb),
-        .inst_sram_addr(inst_sram_addr),
-        .inst_sram_wdata(inst_sram_wdata),
-        .inst_sram_addr_ok(inst_sram_addr_ok),
-        .inst_sram_data_ok(inst_sram_data_ok),
-        .inst_sram_rdata(inst_sram_rdata),
-        
-        .id_allowin(id_allowin),
-        .br_taken_id(br_taken_id),
-        .br_taken_exe(br_taken_exe),
-        .br_target_id(br_target_id),
-        .br_target_exe(br_target_exe),
-        // .id_to_if_pc_next(id_to_if_pc_next),
-        .if_to_id_valid(if_to_id_valid),
-        .if_inst(if_inst),
-        .if_pc(if_pc),
-        .ertn_pc(ertn_pc),
-        .exec_pc(exec_pc),
-        .ertn_flush(ertn_flush),
-        .exec_flush(exec_flush),
-        .if_exc_rf(if_exc_rf)
-    );
-
-    IDstate idstate(
-        .clk(clk),
-        .resetn(resetn),
-        .id_valid(id_valid),
-
-        .id_allowin(id_allowin),
-        .br_taken_id(br_taken_id),
-        .br_taken_exe(br_taken_exe),
-        .br_target_id(br_target_id),
-        .br_rf_all_id(br_rf_all_id),
-        // .id_to_if_pc_next(id_to_if_pc_next),
-        .if_to_id_valid(if_to_id_valid),
-        .if_inst(if_inst),
-        .if_pc(if_pc),
-
-        .exe_allowin(exe_allowin),
-        .id_rf_all(id_rf_all),
-        .id_to_exe_valid(id_to_exe_valid),
-        .id_pc(id_pc),
-        .id_alu_data_all(id_alu_data_all),
-        .id_res_from_mem(id_res_from_mem),
-        .id_mem_all(id_mem_all),
-        .id_rkd_value(id_rkd_value),
-
-        .exe_fwd_all(exe_fwd_all),
-        .mem_fwd_all(mem_rf_all),
-        .wb_fwd_all(wb_rf_all),
-
-        .exe_valid(exe_valid),
-        .mem_valid(mem_valid),
-        .wb_valid(wb_valid),
-
-        .cancel_exc_ertn(cancel_exc_ertn),
-        .csr_rd_value(csr_rd_value),
-        .if_exc_rf(if_exc_rf),
-        .has_int(has_int),
-        .csr_re(csr_re),
-        .csr_rd_num(csr_rd_num),
-        .id_csr_rf(id_csr_rf),
-        .id_exc_rf(id_exc_rf),
-        .id_timer_rf(id_timer_rf)
-    );
+	reg [3:0] bid_r;
 
 
-    EXEstate exestate(
-        .clk(clk),
-        .resetn(resetn),
-        .exe_valid(exe_valid),
-        
-        .exe_allowin(exe_allowin),
-        .exe_ready_go(exe_ready_go),
-        .id_rf_all(id_rf_all),
-        .id_to_exe_valid(id_to_exe_valid),
-        .id_pc(id_pc),
-        .id_alu_data_all(id_alu_data_all),
-        .id_res_from_mem(id_res_from_mem),
-        .id_mem_all(id_mem_all),
-        .id_rkd_value(id_rkd_value),
-        .br_target_id(br_target_id),
-        .br_taken_exe(br_taken_exe),
-        .br_target_exe(br_target_exe),
-        .br_rf_all_id(br_rf_all_id),
 
-        .mem_allowin(mem_allowin),
-        .exe_fwd_all(exe_fwd_all),
-        .exe_to_mem_valid(exe_to_mem_valid),
-        .exe_pc(exe_pc),
-        .exe_result(exe_result),
-        .exe_res_from_mem(exe_res_from_mem),
-        .exe_mem_all(exe_mem_all),
-        .exe_rkd_value(exe_rkd_value),
+/*
+ *	THIS MODULE: State Machines (state transition logic)
+ */
 
-        .data_sram_req(data_sram_req),
-        .data_sram_wr(data_sram_wr),
-        .data_sram_size(data_sram_size),
-        .data_sram_wstrb(data_sram_wstrb),
-        .data_sram_addr(data_sram_addr),
-        .data_sram_wdata(data_sram_wdata),
-        .data_sram_addr_ok(data_sram_addr_ok),
+	// auxilary classfication
+	wire req_read_data  = cpu_data_sram_req && !cpu_data_sram_wr;
+	wire req_read_inst  = cpu_inst_sram_req && !cpu_inst_sram_wr;
+	wire req_write_data = cpu_data_sram_req &&  cpu_data_sram_wr;
+		// impossible to write inst sram
+	
+	wire read_req_from_cpu  =  req_read_data || req_read_inst;
+	wire write_req_from_cpu = req_write_data && !read_req_from_cpu;	
+		// STRICTLY NOT CONTAIN READ REQUEST
 
-        .cancel_exc_ertn(cancel_exc_ertn),
-        .id_csr_rf(id_csr_rf),
-        .id_timer_rf(id_timer_rf),
-        .id_exc_rf(id_exc_rf),
-        .timer(current_time),
-        .mem_exc_flush(mem_exc_flush),
-        .exe_exc_rf(exe_exc_rf),
-        .exe_csr_rf(exe_csr_rf)
-    );
+	/*
+	 *	AR Channel: Read Address Channel (state transition logic)
+	 *	
+	 *	INIT -> WAIT: 	1. 	read request from cpu
+	 *					2. 	r_state == INIT (R Channel is ready to accept request)
+	 *  WAIT -> DONE: 		arready && arvalid
+	 *	DONE -> INIT: 		NOTHING
+	 */
+	always @(posedge aclk) begin
+		if (~aresetn)
+			ar_state <= INIT;
+		else begin
+			case (ar_state)
 
-    MEMstate memstate(
-        .clk(clk),
-        .resetn(resetn),
-        .mem_valid(mem_valid),
+				INIT: begin
+					if (read_req_from_cpu && r_state == INIT)
+						ar_state <= WAIT;
+					else
+						ar_state <= INIT;
+				end
 
-        .mem_allowin(mem_allowin),
-        .exe_ready_go(exe_ready_go),
-        .exe_rf_all(exe_fwd_all[37:32]),
-        .exe_to_mem_valid(exe_to_mem_valid),
-        .exe_pc(exe_pc),
-        .exe_result(exe_result),
-        .exe_res_from_mem(exe_res_from_mem),
-        .exe_mem_all(exe_mem_all),
-        .exe_rkd_value(exe_rkd_value),
+				WAIT: begin
+					if (arready && arvalid)
+						ar_state <= DONE;
+					else
+						ar_state <= WAIT;
+				end
 
-        .wb_allowin(wb_allowin),
-        .mem_rf_all(mem_rf_all),
-        .mem_to_wb_valid(mem_to_wb_valid),
-        .mem_pc(mem_pc),
+				DONE:
+					ar_state <= INIT;
 
-        // .data_sram_en(data_sram_en),
-        // .data_sram_we(data_sram_wstrb),
-        // .data_sram_addr(data_sram_addr),
-        // .data_sram_wdata(data_sram_wdata),
-        // .data_sram_rdata(data_sram_rdata),
-        .data_sram_data_ok(data_sram_data_ok),
-        .data_sram_rdata(data_sram_rdata),
+				default:
+					ar_state <= INIT;
+
+			endcase
+		end
+	end
 
 
-        .cancel_exc_ertn(cancel_exc_ertn),
-        .exe_csr_rf(exe_csr_rf),
-        .exe_exc_rf(exe_exc_rf),
-        .mem_exc_rf(mem_exc_rf),
-        .mem_csr_rf(mem_csr_rf),
-        .mem_fault_vaddr(mem_fault_vaddr),
-        .mem_exc_flush(mem_exc_flush)
-    ) ;
+	/*
+	 *	R Channel: Read Data Channel (state transition logic)
+	 *	
+	 *	INIT -> WAIT: 	1. 	ar_state == WAIT (AR Channel accepted request)
+	 *					2. 	arready && arvalid
+	 *	WAIT -> DONE: 		rvalid && rlast && rready (Need to add burst support in future)
+	 *	DONE -> INIT: 		NOTHING
+	 */
+	always @(posedge aclk) begin
+		if (~aresetn)
+			r_state <= INIT;
+		else begin
+			case (r_state)
 
-    WBstate wbstate(
-        .clk(clk),
-        .resetn(resetn),
-        .wb_valid(wb_valid),
+				INIT: begin
+					if (arready && arvalid && ar_state == WAIT)
+						r_state <= WAIT;
+					else
+						r_state <= INIT;
+				end
 
-        .wb_allowin(wb_allowin),
-        .mem_rf_all(mem_rf_all),
-        .mem_to_wb_valid(mem_to_wb_valid),
-        .mem_pc(mem_pc),
+				WAIT: begin
+					if (rvalid && rlast && rready)	// FIXME: rlast will be used in cache
+						r_state <= DONE;
+					else
+						r_state <= WAIT;
+				end
 
-        .debug_wb_pc(debug_wb_pc),
-        .debug_wb_rf_we(debug_wb_rf_we),
-        .debug_wb_rf_wnum(debug_wb_rf_wnum),
-        .debug_wb_rf_wdata(debug_wb_rf_wdata),
+				DONE:
+						r_state <= INIT;
 
-        .wb_rf_all(wb_rf_all),
+				default:
+					r_state <= INIT;
 
-        .cancel_exc_ertn(cancel_exc_ertn),
-        .mem_csr_rf(mem_csr_rf),
-        .mem_exc_rf(mem_exc_rf),
-        .mem_fault_vaddr(mem_fault_vaddr),
-        .csr_wr_mask(csr_wr_mask),
-        .csr_wr_value(csr_wr_value),
-        .csr_wr_num(csr_wr_num),
-        .csr_we(csr_we),
-        .wb_exc(wb_exc),
-        .ertn_flush(ertn_flush),
-        .wb_fault_vaddr(wb_fault_vaddr)
-    );
+			endcase
+		end
+	end
 
-    csr csr_reg(
-        .clk(clk),
-        .exc(wb_exc),
-        .ertn_flush(ertn_flush),
-        .resetn(resetn),
-        .csr_re(csr_re),
-        .csr_wr_num(csr_wr_num),
-        .csr_rd_num(csr_rd_num),
-        .csr_we(csr_we),
-        .csr_wr_mask(csr_wr_mask),
-        .csr_wr_value(csr_wr_value),
-        .wb_pc(debug_wb_pc),
-        .wb_fault_vaddr(wb_fault_vaddr),
-        .csr_rd_value(csr_rd_value),
-        .csr_eentry_pc(exec_pc),
-        .csr_eertn_pc(ertn_pc),
-        .has_int(has_int)
-    );
+	
+	/*
+	 *	AW & W Channel: Write Address & Data Channel (state transition logic)
+	 *
+	 *	INIT -> WAIT: 	1. 	write request from cpu
+	 *					2. 	b_state == INIT (B Channel is ready to accept request)
+	 *	WAIT -> WAIT2: 	  	awready && awvalid	(FIRST ENSURE THE AW CHANNEL IS READY)
+	 *	WAIT2 -> DONE: 	 	wready && wvalid
+	 *	DONE -> INIT: 		NOTHING
+	 */
+	always @(posedge aclk) begin
+		if (~aresetn)
+			w_state <= INIT;
+		else begin
+			case (w_state)
 
-    cpu_timer localtimer(
-        .clk(clk),
-        .resetn(resetn),
-        .time_now(current_time)
-    );
+				INIT: begin
+					if (write_req_from_cpu && b_state == INIT)
+						w_state <= WAIT;
+					else
+						w_state <= INIT;
+				end
+
+				WAIT: begin
+					if (awready && awvalid)
+						w_state <= WAIT2;
+					else
+						w_state <= WAIT;
+				end
+
+				WAIT2: begin
+					if (wready && wvalid)
+						w_state <= DONE;
+					else
+						w_state <= WAIT2;
+				end
+
+				DONE:
+					w_state <= INIT;
+
+				default:
+					w_state <= INIT;
+
+			endcase
+		end
+	end
+
+	/*
+	 *	B Channel: Write Response Channel (state transition logic)
+	 *
+	 *	INIT -> WAIT: 	1. 	w_state == WAIT2 (W Channel accepted request)
+	 *					2. 	wready && wvalid
+	 *	WAIT -> DONE: 		bready && bvalid
+	 *	DONE -> INIT: 		NOTHING
+	 */
+	always @(posedge aclk) begin
+		if (~aresetn)
+			b_state <= INIT;
+		else begin
+			case (b_state)
+
+				INIT: begin
+					if (wready && wvalid && w_state == WAIT2)
+						b_state <= WAIT;
+					else
+						b_state <= INIT;
+				end
+
+				WAIT: begin
+					if (bvalid)
+						b_state <= DONE;
+					else
+						b_state <= WAIT;
+				end
+
+				DONE:
+					b_state <= INIT;
+
+				default:
+					b_state <= INIT;
+
+			endcase
+		end
+	end
+
+/*
+ *	THIS MODULE: State Machines (output logic)
+ */
+
+	/*
+	 *	AR Channel: Read Address Channel (output logic)
+	 */
+	always @(posedge aclk) begin
+		if (ar_state == INIT) begin
+			arid_r    <= req_read_data ? ID_DATA : ID_INST;
+			araddr_r  <= req_read_data ? cpu_data_sram_addr : cpu_inst_sram_addr;
+			arlen_r   <= 8'd0;
+			arsize_r  <= {1'b0, req_read_data ? cpu_data_sram_size : cpu_inst_sram_size};
+			arburst_r <= 2'b1;
+			arlock_r  <= 2'b0;
+			arcache_r <= 4'b0;
+			arprot_r  <= 3'b0;
+		end
+	end
+
+	/*
+	 *	R Channel: Read Data Channel (output logic)
+	 */
+	always @(posedge aclk) begin
+		if (~aresetn) begin
+			rid_r   <=  4'b0;
+			rdata_r <= 32'b0;
+		end
+		else if (r_state == WAIT) begin
+			rid_r   <= rid;
+			rdata_r <= rdata;
+		end
+	end
+
+	/*
+	 *	AW & W Channel: Write Address & Data Channel (output logic)
+	 */
+	always @(posedge aclk) begin
+		if (w_state == INIT) begin
+			awid_r    <= ID_DATA;
+			awaddr_r  <= cpu_data_sram_addr;
+			awlen_r   <= 8'b0;
+			awsize_r  <= {1'b0, cpu_data_sram_size};
+			awburst_r <= 2'b1;
+			awlock_r  <= 2'b0;
+			awcache_r <= 4'b0;
+			awprot_r  <= 3'b0;
+
+			wid_r     <= ID_DATA;
+			wdata_r   <= cpu_data_sram_wdata;
+			wstrb_r   <= cpu_data_sram_wstrb;
+			wlast_r   <= 1'b1;
+		end
+	end
+
+	/*
+	 *	B Channel: Write Response Channel (output logic)
+	 */
+	always @(posedge aclk) begin
+		if (~aresetn)
+			bid_r   <= 4'b0;
+		else if (b_state == WAIT)
+			bid_r <= bid;
+	end
+
+/*
+ *	CPU: SRAM Interface (cpu_core::in)
+ */
+
+	// auxilary classfication
+	wire r_inst_addr_ok = (ar_state == DONE) && (arid_r == ID_INST);
+	wire r_data_addr_ok = (ar_state == DONE) && (arid_r == ID_DATA);
+	wire r_inst_data_ok = ( r_state == DONE) && ( rid_r == ID_INST);
+	wire r_data_data_ok = ( r_state == DONE) && ( rid_r == ID_DATA);
+	wire w_data_addr_ok = ( w_state == DONE) && ( wid_r == ID_DATA);
+	wire w_data_data_ok = ( b_state == DONE) && ( bid_r == ID_DATA);
+
+	// cpu interface
+	assign cpu_inst_sram_rdata   = rdata_r;	// they are the same
+	assign cpu_data_sram_rdata   = rdata_r;	// cause only one of them is valid
+	assign cpu_inst_sram_addr_ok = r_inst_addr_ok;
+	assign cpu_inst_sram_data_ok = r_inst_data_ok;
+	assign cpu_data_sram_addr_ok = r_data_addr_ok || w_data_addr_ok;
+	assign cpu_data_sram_data_ok = r_data_data_ok || w_data_data_ok;
+
+
+/*
+ *	THIS MODULE: AXI Interface (cpu_top::out)
+ */
+	assign arid		= arid_r;
+	assign araddr	= araddr_r;
+	assign arlen	= arlen_r;
+	assign arsize	= arsize_r;
+	assign arburst	= arburst_r;
+	assign arlock	= arlock_r;
+	assign arcache	= arcache_r;
+	assign arprot	= arprot_r;
+	
+	assign awid 	= awid_r; 
+	assign awaddr 	= awaddr_r;
+	assign awlen 	= awlen_r;
+	assign awsize 	= awsize_r;
+	assign awburst 	= awburst_r;
+	assign awlock 	= awlock_r;
+	assign awcache 	= awcache_r;
+	assign awprot 	= awprot_r;
+	
+	assign wid 		= wid_r;
+	assign wdata 	= wdata_r;
+	assign wstrb 	= wstrb_r;
+	assign wlast 	= wlast_r;
+
+	// signals need async reset
+	assign arvalid	= (ar_state == WAIT ) &&  aresetn;	// RESET VAL: 0
+	assign rready 	= ( r_state == WAIT ) || ~aresetn;	// RESET VAL: 1
+	assign awvalid 	= ( w_state == WAIT ) &&  aresetn;	// RESET VAL: 0
+	assign wvalid 	= ( w_state == WAIT2) &&  aresetn;	// RESET VAL: 0
+	assign bready 	= ( b_state == WAIT ) || ~aresetn;	// RESET VAL: 1
+
+
+/*
+ *	CPU: Trace Debug Interface (cpu_core::out)
+ */
+	assign debug_wb_pc       = cpu_debug_wb_pc;
+	assign debug_wb_rf_we    = cpu_debug_wb_rf_we;
+	assign debug_wb_rf_wnum  = cpu_debug_wb_rf_wnum;
+	assign debug_wb_rf_wdata = cpu_debug_wb_rf_wdata;
+
+/*
+ * CPU: instanciation (cpu_core::in/out)
+ */
+
+	mycpu_core mycpu_core_inst (
+		.clk				(aclk),
+		.resetn				(aresetn),
+
+		.inst_sram_req		(cpu_inst_sram_req),
+		.inst_sram_wr		(cpu_inst_sram_wr),
+		.inst_sram_size		(cpu_inst_sram_size),
+		.inst_sram_wstrb	(cpu_inst_sram_wstrb),
+		.inst_sram_addr		(cpu_inst_sram_addr),
+		.inst_sram_wdata	(cpu_inst_sram_wdata),
+		.inst_sram_addr_ok	(cpu_inst_sram_addr_ok),
+		.inst_sram_data_ok	(cpu_inst_sram_data_ok),
+		.inst_sram_rdata	(cpu_inst_sram_rdata),
+
+		.data_sram_req		(cpu_data_sram_req),
+		.data_sram_wr		(cpu_data_sram_wr),
+		.data_sram_size		(cpu_data_sram_size),
+		.data_sram_wstrb	(cpu_data_sram_wstrb),
+		.data_sram_addr		(cpu_data_sram_addr),
+		.data_sram_wdata	(cpu_data_sram_wdata),
+		.data_sram_addr_ok	(cpu_data_sram_addr_ok),
+		.data_sram_data_ok	(cpu_data_sram_data_ok),
+		.data_sram_rdata	(cpu_data_sram_rdata),
+
+		.debug_wb_pc		(cpu_debug_wb_pc),
+		.debug_wb_rf_we		(cpu_debug_wb_rf_we),
+		.debug_wb_rf_wnum	(cpu_debug_wb_rf_wnum),
+		.debug_wb_rf_wdata	(cpu_debug_wb_rf_wdata)
+	);
+
 endmodule
