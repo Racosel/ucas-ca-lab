@@ -76,7 +76,7 @@ module IFstate(
 
     always @(posedge clk ) begin
         if(~resetn)
-            pre_if_valid <= 1'b0;
+            pre_if_valid <= 1'b1;
         else if(~pre_if_handled)//request not received, always valid
             pre_if_valid <= 1'b1;
         else if(pre_if_handled & (br_taken_exe | br_taken_id | exec_flush | ertn_flush) & ~if_allowin)
