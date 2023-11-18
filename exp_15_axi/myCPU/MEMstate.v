@@ -68,8 +68,12 @@ module MEMstate(
     always @(posedge clk) begin
         if(~resetn | cancel_exc_ertn)
             mem_valid <= 1'b0;
-        else if(mem_allowin & exe_ready_go)
-            mem_valid <= exe_to_mem_valid; 
+        else if(mem_allowin)begin
+            if(exe_ready_go)
+                mem_valid <= exe_to_mem_valid;
+            else 
+                mem_valid <= 1'b0;
+        end
         else
             mem_valid <= mem_valid;
     end
@@ -131,7 +135,7 @@ module MEMstate(
                                  | {16{ld_b & ld_se & mem_result[7]}};
     assign {ld_b, ld_h, ld_w, ld_se} = mem_all[6:3];
     assign mem_we = mem_all[7];
-    assign mem_ld_not_handled = mem_res_from_mem & ~data_sram_data_ok;
+    assign mem_ld_not_handled = mem_res_from_mem & ~data_sram_data_ok | ~mem_valid;
     // assign mem_ale = 2'b0;
     assign mem_fault_vaddr = alu_result;
     assign mem_exc_flush = (|mem_exc_rf_reg) & mem_valid;

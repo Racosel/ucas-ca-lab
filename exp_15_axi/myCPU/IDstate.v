@@ -228,8 +228,8 @@ module IDstate(
     // assign raw_exe_id  = exe_valid & exe_rf_we & ((need_raddr1 & (|rf_raddr1) & exe_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & exe_rf_waddr == rf_raddr2));
     // assign raw_mem_id  = mem_valid & mem_rf_we & ((need_raddr1 & (|rf_raddr1) & mem_rf_waddr == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & mem_rf_waddr == rf_raddr2));
     // assign raw_wb_id   = wb_valid  & wb_rf_we  & ((need_raddr1 & (|rf_raddr1) & wb_rf_waddr  == rf_raddr1) | (need_raddr2 & (|rf_raddr2) & wb_rf_waddr  == rf_raddr2));
-    assign raw_exe_ldw = ((exe_valid & exe_rf_we & exe_res_from_mem) | mem_ld_not_handled) & (((|rf_raddr1) & exe_rf_waddr == rf_raddr1) | ((|rf_raddr2) & exe_rf_waddr == rf_raddr2))
-                         | need_csr & (csr_exe | csr_mem | csr_wb);
+    assign raw_exe_ldw = (exe_valid & exe_rf_we & exe_res_from_mem) & (((|rf_raddr1) & exe_rf_waddr == rf_raddr1) | ((|rf_raddr2) & exe_rf_waddr == rf_raddr2))
+                         | mem_ld_not_handled & (raw_mem_r1 | raw_mem_r2) | need_csr & (csr_exe | csr_mem | csr_wb);
     
     assign raw_exe_r1  = exe_valid & exe_rf_we & (need_raddr1 & (|rf_raddr1) & exe_rf_waddr == rf_raddr1);
     assign raw_exe_r2  = exe_valid & exe_rf_we & (need_raddr2 & (|rf_raddr2) & exe_rf_waddr == rf_raddr2);

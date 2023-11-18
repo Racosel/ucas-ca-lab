@@ -85,10 +85,11 @@ module mycpu_top (
  *	THIS MODULE: parameters
  */
 
-	parameter INIT    	= 4'b0001,
-			  WAIT 		= 4'b0010,
-			  WAIT2  	= 4'b0100,
-			  DONE    	= 4'b1000;
+	parameter INIT    	= 5'b00001,
+			  WAIT0		= 5'b00010,
+			  WAIT 		= 5'b00100,
+			  WAIT2  	= 5'b01000,
+			  DONE    	= 5'b10000;
 
 	parameter ID_INST	= 4'b0000,
 			  ID_DATA	= 4'b0001;
@@ -97,8 +98,9 @@ module mycpu_top (
  * 	THIS MODULE: State Machine registers
  */
 
-	reg [ 3:0] ar_state, r_state, w_state, b_state;
-	
+	reg [ 4:0] ar_state, r_state, w_state, b_state;
+
+	wire [3:0] arid_w;
 	reg [ 3:0] arid_r;
 	reg [31:0] araddr_r;
 	reg [ 7:0] arlen_r;
@@ -111,6 +113,7 @@ module mycpu_top (
 	reg [ 3:0] rid_r;
 	reg [31:0] rdata_r;
 
+	wire [3:0] awid_w;
 	reg [ 3:0] awid_r;
 	reg [31:0] awaddr_r;
 	reg [ 7:0] awlen_r;
@@ -140,7 +143,8 @@ module mycpu_top (
 		// impossible to write inst sram
 	
 	wire read_req_from_cpu  =  req_read_data || req_read_inst;
-	wire write_req_from_cpu = req_write_data && !read_req_from_cpu;	
+	// wire write_req_from_cpu = req_write_data && !read_req_from_cpu;
+	wire write_req_from_cpu = req_write_data;
 		// STRICTLY NOT CONTAIN READ REQUEST
 
 	/*
@@ -158,10 +162,17 @@ module mycpu_top (
 			case (ar_state)
 
 				INIT: begin
-					if (read_req_from_cpu && r_state == INIT)
-						ar_state <= WAIT;
+					if (req_read_data & cpu_data_sram_req | cpu_inst_sram_req & cpu_inst_sram_addr_ok)
+						ar_state <= WAIT0;
 					else
 						ar_state <= INIT;
+				end
+
+				WAIT0:begin
+					if(r_state == INIT)
+						ar_state <= WAIT;
+					else
+						ar_state <= WAIT0;
 				end
 
 				WAIT: begin
@@ -237,10 +248,17 @@ module mycpu_top (
 			case (w_state)
 
 				INIT: begin
-					if (write_req_from_cpu && b_state == INIT)
-						w_state <= WAIT;
+					if (cpu_data_sram_addr_ok & req_write_data)
+						w_state <= WAIT0;
 					else
 						w_state <= INIT;
+				end
+
+				WAIT0:begin
+					if(b_state == INIT)
+						w_state <= WAIT;
+					else
+						w_state <= WAIT0;
 				end
 
 				WAIT: begin
@@ -312,9 +330,10 @@ module mycpu_top (
 	/*
 	 *	AR Channel: Read Address Channel (output logic)
 	 */
+	assign arid_w = req_read_data ? ID_DATA : ID_INST;
 	always @(posedge aclk) begin
-		if (ar_state == INIT) begin
-			arid_r    <= req_read_data ? ID_DATA : ID_INST;
+		if (req_read_data & r_data_addr_ok | cpu_inst_sram_req & cpu_inst_sram_addr_ok) begin
+			arid_r    <= arid_w;
 			araddr_r  <= req_read_data ? cpu_data_sram_addr : cpu_inst_sram_addr;
 			arlen_r   <= 8'd0;
 			arsize_r  <= {1'b0, req_read_data ? cpu_data_sram_size : cpu_inst_sram_size};
@@ -342,9 +361,10 @@ module mycpu_top (
 	/*
 	 *	AW & W Channel: Write Address & Data Channel (output logic)
 	 */
+	assign awid_w = ID_DATA;
 	always @(posedge aclk) begin
-		if (w_state == INIT) begin
-			awid_r    <= ID_DATA;
+		if (cpu_data_sram_addr_ok & req_write_data) begin
+			awid_r    <= awid_w;
 			awaddr_r  <= cpu_data_sram_addr;
 			awlen_r   <= 8'b0;
 			awsize_r  <= {1'b0, cpu_data_sram_size};
@@ -377,14 +397,14 @@ module mycpu_top (
 	// auxilary classfication
 
 	// ready to accept request, same as AR Channel's INIT -> WAIT logic
-	wire r_inst_addr_ok = (read_req_from_cpu && r_state == INIT) && (arid_r == ID_INST) && aresetn;
-	wire r_data_addr_ok = (read_req_from_cpu && r_state == INIT) && (arid_r == ID_DATA) && aresetn;
+	wire r_inst_addr_ok = (read_req_from_cpu && ar_state == INIT) && (arid_w == ID_INST) && aresetn;
+	wire r_data_addr_ok = (read_req_from_cpu && ar_state == INIT) && (arid_w == ID_DATA) && aresetn;
 
 	wire r_inst_data_ok = ( r_state == DONE) && ( rid_r == ID_INST);
 	wire r_data_data_ok = ( r_state == DONE) && ( rid_r == ID_DATA);
 
 	// ready to accept request, same as AW Channel's INIT -> WAIT logic
-	wire w_data_addr_ok = (write_req_from_cpu && b_state == INIT) && ( wid_r == ID_DATA) && aresetn;
+	wire w_data_addr_ok = (write_req_from_cpu && w_state == INIT) && (awid_w == ID_DATA) && aresetn;
 
 	wire w_data_data_ok = ( b_state == DONE) && ( bid_r == ID_DATA);
 
