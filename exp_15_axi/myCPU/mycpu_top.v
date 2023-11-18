@@ -375,11 +375,17 @@ module mycpu_top (
  */
 
 	// auxilary classfication
-	wire r_inst_addr_ok = (ar_state == DONE) && (arid_r == ID_INST);
-	wire r_data_addr_ok = (ar_state == DONE) && (arid_r == ID_DATA);
+
+	// ready to accept request, same as AR Channel's INIT -> WAIT logic
+	wire r_inst_addr_ok = (read_req_from_cpu && r_state == INIT) && (arid_r == ID_INST) && aresetn;
+	wire r_data_addr_ok = (read_req_from_cpu && r_state == INIT) && (arid_r == ID_DATA) && aresetn;
+
 	wire r_inst_data_ok = ( r_state == DONE) && ( rid_r == ID_INST);
 	wire r_data_data_ok = ( r_state == DONE) && ( rid_r == ID_DATA);
-	wire w_data_addr_ok = ( w_state == DONE) && ( wid_r == ID_DATA);
+
+	// ready to accept request, same as AW Channel's INIT -> WAIT logic
+	wire w_data_addr_ok = (write_req_from_cpu && b_state == INIT) && ( wid_r == ID_DATA) && aresetn;
+
 	wire w_data_data_ok = ( b_state == DONE) && ( bid_r == ID_DATA);
 
 	// cpu interface
