@@ -68,7 +68,7 @@ module mycpu_core(
     wire [5 :0] br_rf_all_id;
     // wire [31:0] id_to_if_pc_next;
     wire [31:0] if_inst;
-    wire [80:0] id_alu_data_all;
+    wire [79:0] id_alu_data_all;
     wire [31:0] exe_result;
 
     wire if_valid, id_valid, exe_valid, mem_valid, wb_valid;
@@ -105,7 +105,6 @@ module mycpu_core(
     wire [5 :0] wb_exc;
     assign exec_flush      = |wb_exc;
     assign cancel_exc_ertn = ertn_flush | exec_flush;
-    assign inst_sram_wr = 1'b0;
     // assign cancel_exc_ertn_mem = cancel_exc_ertn | (|mem_exc_rf);
     IFstate ifstate(
         .clk(clk),
