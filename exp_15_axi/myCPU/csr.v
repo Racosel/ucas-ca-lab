@@ -11,7 +11,6 @@ module csr(
     input         csr_we,
     input  [31:0] csr_wr_mask,
     input  [31:0] csr_wr_value,
-    input  [31:0] badv_input,
     input  [31:0] wb_pc,
     input  [31:0] wb_fault_vaddr,
     output [31:0] csr_rd_value,
