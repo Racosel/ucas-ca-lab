@@ -95,9 +95,9 @@ module MEMstate(
     end
     always @(posedge clk) begin
         if(~resetn)
-            {mem_res_from_mem, mem_all} <= 0;
+            {mem_res_from_mem, mem_all, rkd_value} <= 0;
         else if(mem_allowin & exe_ready_go)
-            {mem_res_from_mem, mem_all} <= {exe_res_from_mem, exe_mem_all};
+            {mem_res_from_mem, mem_all, rkd_value} <= {exe_res_from_mem, exe_mem_all, exe_rkd_value};
     end
 
     always @(posedge clk) begin

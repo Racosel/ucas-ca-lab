@@ -4,7 +4,7 @@ module WBstate(
     output reg         wb_valid,
     // memstate <-> wbstate
     output             wb_allowin,
-    input       [53:0] mem_rf_all, // {mem_rf_we, mem_rf_waddr, mem_rf_wdata_reg}
+    input       [52:0] mem_rf_all, // {mem_rf_we, mem_rf_waddr, mem_rf_wdata_reg}
     input              mem_to_wb_valid,
     input       [31:0] mem_pc,    
     // debug info
