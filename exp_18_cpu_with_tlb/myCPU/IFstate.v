@@ -50,13 +50,14 @@ module IFstate(
     // reg         if_valid;
     wire [31:0] pc_seq;
     wire [31:0] pre_if_pc_next;
-    
+    wire        pre_if_exc;
+    reg         if_exc_reg;
 
     assign pre_if_allowin  = pre_if_handled & if_allowin 
                              | if_allowin & inst_sram_addr_ok;//not received request or has gone
-    assign pre_if_ready_go = inst_sram_addr_ok | pre_if_handled;//request received
+    assign pre_if_ready_go = inst_sram_addr_ok | pre_if_handled | pre_if_exc;//request received
     assign if_allowin      = if_ready_go & id_allowin | if_gone;
-    assign if_ready_go     = (inst_sram_data_ok | if_handled) & ~if_gone;
+    assign if_ready_go     = (inst_sram_data_ok | if_handled) & ~if_gone | if_exc_reg;
     assign if_to_id_valid  = if_valid & if_ready_go;
     
     always @(posedge clk ) begin
@@ -120,9 +121,16 @@ module IFstate(
             if_inst_reg <= if_inst_reg;
     end
 
+    always @(posedge clk ) begin
+        if(~resetn)
+            if_exc_reg <= 0;
+        else if(pre_if_ready_go & if_allowin)
+            if_exc_reg <= pre_if_exc;
+    end
+
     /* Instruction Fetch: use inst_sram */
     // assign inst_sram_en    = if_allowin & resetn;
-    assign inst_sram_req = ~pre_if_handled & if_allowin;
+    assign inst_sram_req = ~pre_if_handled & if_allowin & ~pre_if_exc;
     assign inst_sram_wr = 1'b0;
     assign inst_sram_size = 2'b10;
     assign inst_sram_wstrb = 4'b0;
@@ -145,6 +153,7 @@ module IFstate(
             pc_src <= pre_if_pc_next;
     end
     assign if_inst = {32{~if_handled}} & inst_sram_rdata | {32{if_handled}} & if_inst_reg;
-    assign if_exc_rf = | if_pc_reg[1:0];
     assign if_valid_rf = if_valid;
+    assign pre_if_exc = | pc_src[1:0];
+    assign if_exc_rf = if_exc_reg;
 endmodule
