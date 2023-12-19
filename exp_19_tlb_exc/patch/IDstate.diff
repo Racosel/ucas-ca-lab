@@ -1,0 +1,50 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\IDstate.v
++++ E:\calab\ucas-ca-lab\exp_19_tlb_exc\myCPU\IDstate.v
+@@ -5,7 +5,7 @@
+     // ifstate <-> idstate
+     output            id_allowin,
+     output            br_taken_id,
+-    output      [5:0] br_rf_all_id,
++    output     [5 :0] br_rf_all_id,
+     output     [31:0] br_target_id,
+     input             if_to_id_valid,
+     input      [31:0] if_inst,
+@@ -40,10 +40,11 @@
+ 
+     //csr related
+     input             cancel_exc_ertn_tlbflush,//canceled by exception or ereturn
+-    input             if_exc_rf,//if can only generate adef
++    input      [3 :0] if_exc_rf,//{pif,ppi,adef,pre_if_tlbr}
+     input             has_int,
+     output     [79:0] id_csr_rf,  //{csr_rd,csr_wr,csr_wr_num,csr_mask,csr_wvalue}
+-    output     [5 :0] id_exc_rf,  //{INT,ADEF,BRK,INE,SYS,ertn}
++    // output     [5 :0] id_exc_rf,  //{INT,ADEF,BRK,INE,SYS,ertn}
++    output     [8 :0] id_exc_rf,//{int,pif,ppi,adef,sys,brk,ine,pre_if_tlbr,ertn}
+     output     [1 :0] id_timer_rf, //{inst_rdcntvh,inst_rdcntvl}
+ 
+     //tlb related
+@@ -53,7 +54,6 @@
+     wire        id_ready_go;
+     // reg         id_valid;
+     reg  [31:0] inst;
+-
+ 
+     wire        ld_se;//load should be unsigned extended
+     wire        ld_w;
+@@ -309,7 +309,6 @@
+             inst  <= if_inst;
+         end
+     end
+-
+     // reg raw_wb_id_reg;
+     // always @(posedge clk) begin
+     //     raw_wb_id_reg <= raw_wb_id;
+@@ -540,7 +539,7 @@
+     assign csr_num    = {14{~inst_rdcntid}} & inst[23:10] | {14{inst_rdcntid}} & 14'h40;
+     // assign csr_rd_num = {14{~inst_rdcntid}} & csr_num | {14{inst_rdcntid}} & 14'h40;
+     // assign csr_wr_num = csr_num;
+-    assign id_exc_rf  = {has_int, if_exc_rf, inst_break, ine_id, inst_syscall, inst_ertn};
++    assign id_exc_rf  = {has_int,if_exc_rf[3:1],inst_syscall,inst_break,ine_id,if_exc_rf[0],inst_ertn};
+     assign csr_mask = {32{inst_csrwr}} & {32{1'b1}} | {32{inst_csrxchg}} & rj_value;
+     assign csr_wr_value = rkd_value;
+     assign csr_rd = inst_csrrd | inst_csrxchg | inst_csrwr | inst_rdcntid;

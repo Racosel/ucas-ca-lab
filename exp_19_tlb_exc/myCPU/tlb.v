@@ -152,12 +152,10 @@ module tlb #(
         for (i = 0; i < TLBNUM; i = i + 1) begin: search
             assign match0[i] = (s0_vppn[18: 9]==tlb_vppn[i][18: 9])
                                 && (tlb_ps4MB[i] || s0_vppn[8:0]==tlb_vppn[i][8:0])
-                                && ((s0_asid==tlb_asid[i]) || tlb_g[i])
-                                && tlb_e[i];
+                                && ((s0_asid==tlb_asid[i]) || tlb_g[i]);
             assign match1[i] = (s1_vppn[18: 9]==tlb_vppn[i][18: 9])
                                 && (tlb_ps4MB[i] || s1_vppn[8:0]==tlb_vppn[i][8:0])
-                                && ((s1_asid==tlb_asid[i]) || tlb_g[i])
-                                && tlb_e[i];
+                                && ((s1_asid==tlb_asid[i]) || tlb_g[i]);
         end
     endgenerate
 
@@ -208,7 +206,7 @@ module tlb #(
     assign invtlb_masks[6] = (cond[0] | cond[2]) & cond[3];   // clear all ASID = s1_asid, VPN = s1_vppn
     generate for (i = 7; i < 32; i = i + 1) begin
         assign invtlb_masks[i] = 16'b0; 
-        // TIPS: 未在表中出现的 op 将触发保留指令例外，此处不做处理
+        // TIPS: 未在表中出现�? op 将触发保留指令例外，此处不做处理
     end
     endgenerate
 

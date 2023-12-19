@@ -1,0 +1,31 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\MEMstate.v
++++ E:\calab\ucas-ca-lab\exp_19_tlb_exc\myCPU\MEMstate.v
+@@ -34,8 +34,8 @@
+     //exc
+     input              cancel_exc_ertn_tlbflush,//canceled by exception or ereturn
+     input       [79:0] exe_csr_rf,//{csr_rd,csr_wr,mem_csr_num,csr_rd_value,csr_mask,csr_wvalue}
+-    input       [6 :0] exe_exc_rf,//{INT,ADEF,BRK,INE,SYS,ertn}
+-    output      [6 :0] mem_exc_rf,//{INT,ADEF,ALE,BRK,INE,SYS,ertn}
++    input       [14:0] exe_exc_rf,//{INT,ADEF,BRK,INE,SYS,ertn}
++    output      [14:0] mem_exc_rf,//{INT,ADEF,ALE,BRK,INE,SYS,ertn}
+     output reg  [79:0] mem_csr_rf,//{csr_rd,csr_wr,mem_csr_num,csr_rd_value,csr_mask,csr_wvalue}
+     output      [31:0] mem_fault_vaddr,
+     output             mem_pipeline_block,
+@@ -65,7 +65,7 @@
+     wire        mem_res_from_csr;
+     wire [3 :0] strb;
+     wire        mem_ale;
+-    reg  [6 :0] mem_exc_rf_reg;
++    reg  [14:0] mem_exc_rf_reg;
+     wire        mem_wr,mem_ld_not_handled;
+     wire        ld_b,ld_h,ld_se,ld_w,mem_we;
+     //wire to handle flush of the pipe line
+@@ -116,7 +116,7 @@
+ 
+     always @(posedge clk) begin
+         if(~resetn)
+-            mem_exc_rf_reg <= 6'b0;
++            mem_exc_rf_reg <= 15'b0;
+         else if(mem_allowin & exe_ready_go)
+             mem_exc_rf_reg <= exe_exc_rf;
+     end

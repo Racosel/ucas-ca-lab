@@ -1,0 +1,171 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\EXEstate.v
++++ E:\calab\ucas-ca-lab\exp_16_axi_rand_delay\myCPU\EXEstate.v
+@@ -30,33 +30,21 @@
+     input  wire        data_sram_addr_ok,
+ 
+     // output reg  [5 :0] exe_rf_all,  // {exe_rf_we, exe_rf_waddr}
+-    // output      [53:0] exe_fwd_all, // {{exe_csr_wr,exe_csr_wr_num}},exe_res_from_mem, exe_rf_we, exe_rf_waddr, exe_result}
+-    output      [39:0] exe_fwd_all,
++    output      [53:0] exe_fwd_all, // {{exe_csr_wr,exe_csr_wr_num}},exe_res_from_mem, exe_rf_we, exe_rf_waddr, exe_result}
+     output             exe_to_mem_valid,
+     output reg  [31:0] exe_pc,
+     output      [31:0] exe_result,
+     output reg         exe_res_from_mem,
+     output reg  [7 :0] exe_mem_all,
+     output reg  [31:0] exe_rkd_value,
+-
+-    //csr related
+-    input              cancel_exc_ertn_tlbflush,//canceled by exception or ereturn
+-    input       [79:0] id_csr_rf,//{csr_rd,csr_wr,csr_num,csr_mask,csr_wvalue}
++    input              cancel_exc_ertn,//canceled by exception or ereturn
++    input       [78:0] id_csr_rf,//{csr_rd,csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+     input       [5 :0] id_exc_rf,
+     input       [1 :0] id_timer_rf,
+     input       [63:0] timer,
+-    input              mem_pipeline_block,
++    input              mem_exc_flush,
+     output      [6 :0] exe_exc_rf,
+-    output      [79:0] exe_csr_rf,//{exe_res_from_csr,csr_wr,csr_um,csr_mask,csr_wvalue}
+-
+-    //tlb related
+-    input       [9 :0] id_tlb_rf,//{inst_tlbsrch,inst_tlbwr,inst_tlbfill,inst_tlbrd,inst_invtlb,tlb_op[4:0]}
+-    output      [2 :0] exe_tlb_rf,//now tlbsrch has handled
+-    output             exe_tlbsrch,
+-    output             exe_invtlb,
+-    output      [9 :0] exe_invasid,
+-    output      [18:0] exe_invvppn,
+-    output      [4 :0] tlb_op
++    output      [78:0] exe_csr_rf//{csr_wr,csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+ );
+     // reg         exe_valid;
+     reg         inst_beq, inst_bne, inst_blt, inst_bltu, inst_bge, inst_bgeu;
+@@ -77,34 +65,27 @@
+     wire        div_complete;
+     // wire [31:0] exe_result;
+     wire        rj_eq_rd;
+-
+-    //exe csr
+-    wire        exe_res_from_csr;
+     wire [13:0] exe_csr_wr_num;
+     wire        exe_csr_wr;
+     wire        exe_csr_rd;
+     wire [31:0] exe_csr_rd_value;
+     wire [31:0] timer_result;
+-    reg  [79:0] exe_csr_rf_reg;
++    reg  [78:0] exe_csr_rf_reg;
+     wire        mem_ale;
+     reg         mem_handled;
+     //mem_rf
+-    wire        mem_we, ld_b, ld_h, ld_w, ld_se, st_b, st_h, st_w;
+-    //tlb rf
+-    reg  [9 :0] exe_tlb_rf_reg;
+-    wire        inst_tlbsrch;
+-    wire [4 :0] tlb_op;
++     wire        mem_we, ld_b, ld_h, ld_w, ld_se, st_b, st_h, st_w;
+ 
+     /* valid signals */
+     assign exe_ready_go      = (~exe_alu_op[13] | div_complete) 
+                                & ((mem_handled & mem_allowin | data_sram_addr_ok & mem_allowin) | ~exe_res_from_mem & ~mem_we 
+-                                   | mem_pipeline_block | cancel_exc_ertn_tlbflush | (|exe_exc_rf) ); //need mem
+-    assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin | cancel_exc_ertn_tlbflush;
++                                   | mem_exc_flush | cancel_exc_ertn | (|exe_exc_rf) ); //need mem
++    assign exe_allowin       = ~exe_valid | exe_ready_go & mem_allowin | cancel_exc_ertn;
+     assign exe_to_mem_valid  = exe_valid & exe_ready_go;
+     always @(posedge clk) begin
+         if(~resetn)
+             exe_valid <= 1'b0;
+-        else if(br_taken_exe | cancel_exc_ertn_tlbflush | mem_pipeline_block)
++        else if(br_taken_exe | cancel_exc_ertn | mem_exc_flush)
+             exe_valid <= 1'b0;
+         else if(exe_allowin)
+             exe_valid <= id_to_exe_valid; 
+@@ -147,10 +128,10 @@
+         else if(id_to_exe_valid & exe_allowin)
+             exe_rf_all <= id_rf_all;
+     end
+-    //csr rf
+-    always @(posedge clk ) begin
+-        if(~resetn)
+-            exe_csr_rf_reg <= 79'b0;
++
++    always @(posedge clk ) begin
++        if(~resetn)
++            exe_csr_rf_reg <= 78'b0;
+         else if(id_to_exe_valid & exe_allowin)
+             exe_csr_rf_reg <= id_csr_rf;
+     end
+@@ -168,7 +149,7 @@
+         else if(id_to_exe_valid & exe_allowin)
+             exe_timer_reg <= id_timer_rf;
+     end
+-    //axi sram rf
++
+     always @(posedge clk ) begin
+         if(~resetn)
+             mem_handled <= 1'b0;
+@@ -177,13 +158,7 @@
+         else if(data_sram_addr_ok & data_sram_req)
+             mem_handled <= 1'b1;
+     end
+-    //tlb rf
+-    always @(posedge clk) begin
+-        if(~resetn)
+-            exe_tlb_rf_reg <= 10'b0;
+-        else if(exe_allowin & id_to_exe_valid)
+-            exe_tlb_rf_reg <= id_tlb_rf;
+-    end
++
+     /* alu instantiation */        
+     alu u_alu(
+         .alu_op     (exe_alu_op[11:0]),
+@@ -205,7 +180,7 @@
+     div u_div(
+         .clk(clk),
+         .resetn(resetn),
+-        .cancel_exc_ertn(cancel_exc_ertn_tlbflush),
++        .cancel_exc_ertn(cancel_exc_ertn),
+         .div(exe_alu_op[13] & exe_valid),
+         .div_signed(exe_calc_s),
+         .x(exe_alu_src1),
+@@ -221,11 +196,11 @@
+                         | {32{~exe_alu_op[12] & ~exe_alu_op[13]}} & exe_alu_result);
+ 
+     //mem ref
+-    assign mem_we          = exe_mem_all[7] & exe_valid & ~cancel_exc_ertn_tlbflush & ~mem_ale;
++    assign mem_we          = exe_mem_all[7] & exe_valid & ~cancel_exc_ertn & ~mem_ale;
+     assign {st_b, st_h, st_w}        = exe_mem_all[2:0];
+-    // assign data_sram_en    = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_pipeline_block);//(|mem_exc_rf[6:0]));
++    // assign data_sram_en    = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_exc_flush);//(|mem_exc_rf[6:0]));
+     assign data_sram_wr    = mem_we;
+-    assign data_sram_req   = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_pipeline_block) & ~mem_handled & exe_valid & mem_allowin;//(|mem_exc_rf[6:0]))
++    assign data_sram_req   = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_exc_flush) & ~mem_handled & exe_valid & mem_allowin;//(|mem_exc_rf[6:0]))
+     assign data_sram_size  = {st_w,st_h};
+     assign data_sram_wstrb = {4{st_w}} | {4{st_h}} & {exe_result[1],exe_result[1],~exe_result[1],~exe_result[1]}
+                   | {4{st_b}} & {exe_result[1:0]==2'b11,exe_result[1:0]==2'b10,
+@@ -238,7 +213,7 @@
+                        | (exe_mem_all[7]) & (st_h & exe_result[0] | st_w & (|exe_result[1:0]));
+ 
+     assign timer_result = {32{exe_timer_reg[0]}} & timer[31:0] | {32{exe_timer_reg[1]}} & timer[63:32];
+-    assign exe_fwd_all = {exe_res_from_csr,exe_res_from_mem, exe_rf_all, exe_result} & {54{exe_valid}};
++    assign exe_fwd_all = {exe_csr_wr,exe_csr_wr_num,exe_res_from_mem, exe_rf_all, exe_result} & {54{exe_valid}};
+ 
+     //branch reference
+     assign rj_eq_rd = (exe_alu_src1 == exe_alu_src2);
+@@ -252,17 +227,7 @@
+ 
+     //exc reference
+     assign exe_exc_rf = {exe_exc_rf_reg[5:4],mem_ale,exe_exc_rf_reg[3:0]};
+-    assign exe_res_from_csr = exe_csr_rf_reg[79];
+     assign exe_csr_wr_num = exe_csr_rf_reg[77:64];
+     assign exe_csr_wr = exe_csr_rf_reg[78];
+     assign exe_csr_rf = exe_csr_rf_reg;
+-    //tlb rf
+-    assign inst_tlbsrch  = exe_tlb_rf_reg[9];
+-    assign exe_tlbsrch   = inst_tlbsrch & exe_valid & ~mem_pipeline_block;
+-    assign inst_invtlb   = exe_tlb_rf_reg[5];
+-    assign exe_invtlb   = inst_invtlb & exe_valid & ~mem_pipeline_block;
+-    assign tlb_op        = exe_tlb_rf_reg[4:0];
+-    assign exe_invasid   = exe_alu_src1[9:0];
+-    assign exe_invvppn   = exe_alu_src2[31:13];
+-    assign exe_tlb_rf    = exe_tlb_rf_reg[8:6];
+ endmodule

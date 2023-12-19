@@ -1,0 +1,545 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\csr.v
++++ E:\calab\ucas-ca-lab\exp_19_tlb_exc\myCPU\csr.v
+@@ -2,7 +2,7 @@
+ 
+ module csr(
+     input         clk,
+-    input  [5 :0] exc,//{INT,ADEF,ALE,BRK,INE,SYS}
++    input  [13:0] exc,//{int,pil,pis,pif,pme,if_ppi,exe_ppi,adef,ale,sys,brk,ine,if_tlbr,exe_tlbr}
+     input         ertn_flush,
+     input         resetn,
+     input         csr_re,
+@@ -16,12 +16,70 @@
+     output [31:0] csr_rd_value,
+     output [31:0] csr_eentry_pc,
+     output [31:0] csr_eertn_pc,
++    output [31:0] csr_tlbrentry_pc,
+     output        has_int,
+     //tlb related extention
+-    input  [4 :0] tlb_inst,//{inst_tlbsrch,inst_tlbwr,inst_tlbfill,inst_tlbrd,inst_invtlb}
+-    input  [4 :0] invtlb_op,
+-    input  [18:0] inv_vppn,
+-    input  [9 :0] inv_asid
++    input  [3 :0] tlb_inst,//{inst_tlbsrch,inst_tlbwr,inst_tlbfill,inst_tlbrd}
++    //tlb csr wire
++    output [9 :0] asid,
++    output [1 :0] plv,
++    output        csr_tlbsrch,
++    output        da,
++    output        pg,
++    output        csr_dmw0_plv0,
++    output        csr_dmw0_plv3,
++    output [2 :0] csr_dmw0_vseg,
++    output [2 :0] csr_dmw0_pseg,
++    output        csr_dmw1_plv0,
++    output        csr_dmw1_plv3,
++    output [2 :0] csr_dmw1_vseg,
++    output [2 :0] csr_dmw1_pseg,
++    //tlb wire
++    //search port1
++    output [18:0]  s1_vppn,
++    input          s1_found,
++    input  [3 :0]  s1_index,
++    input  [19:0]  s1_ppn,
++    input  [5 :0]  s1_ps,
++    input  [1 :0]  s1_plv,
++    input  [1 :0]  s1_mat,
++    input          s1_d,
++    input          s1_v,
++    //write port
++    output         tlb_we, //w(rite) e(nable)
++    output [3 :0]  w_index,
++    output         w_e,
++    output [18:0]  w_vppn,
++    output [5 :0]  w_ps,
++    output [9 :0]  w_asid,
++    output         w_g,
++    output [19:0]  w_ppn0,
++    output [1 :0]  w_plv0,
++    output [1 :0]  w_mat0,
++    output         w_d0,
++    output         w_v0,
++    output [19:0]  w_ppn1,
++    output [1 :0]  w_plv1,
++    output [1 :0]  w_mat1,
++    output         w_d1,
++    output         w_v1,
++    // read port
++    output [3 :0]  r_index,
++    input          r_e,
++    input  [18:0]  r_vppn,
++    input  [5 :0]  r_ps,
++    input  [9 :0]  r_asid,
++    input          r_g,
++    input  [19:0]  r_ppn0,
++    input  [1 :0]  r_plv0,
++    input  [1 :0]  r_mat0,
++    input          r_d0,
++    input          r_v0,
++    input  [19:0]  r_ppn1,
++    input  [1 :0]  r_plv1,
++    input  [1 :0]  r_mat1,
++    input          r_d1,
++    input          r_v1
+ );
+ 
+ 
+@@ -29,6 +87,12 @@
+             CSR_CRMD_PLV_START      = 0,
+             CSR_CRMD_PLV_END        = 1,
+             CSR_CRMD_IE             = 2,
++            CSR_CRMD_DA             = 3,
++            CSR_CRMD_PG             = 4,
++            CSR_CRMD_DATF_START     = 5,
++            CSR_CRMD_DATF_END       = 6,
++            CSR_CRMD_DATM_START     = 7,
++            CSR_CRMD_DATM_END       = 8,
+             CSR_PRMD                = 14'h1,
+             CSR_PRMD_PPLV_START     = 0,
+             CSR_PRMD_PPLV_END       = 1,
+@@ -88,16 +152,26 @@
+             CSR_ASID_ASID_END       = 9,
+             CSR_TLBRENTRY           = 14'h88,
+             CSR_TLBRENTRY_PPN_START = 12,
+-            CSR_TLBRENTRY_PPN_END   = 31;
++            CSR_TLBRENTRY_PPN_END   = 31,
++            CSR_DMW_PLV0            = 0,
++            CSR_DMW_PLV3            = 3,
++            CSR_DMW_MAT_START       = 4,
++            CSR_DMW_MAT_END         = 5,
++            CSR_DMW_PSEG_START      = 25,
++            CSR_DMW_PSEG_END        = 27,
++            CSR_DMW_VSEG_START      = 29,
++            CSR_DMW_VSEG_END        = 31,
++            CSR_DMW0                = 14'h180,
++            CSR_DMW1                = 14'h181;
+ //crmd start
+ wire [31:0] csr_crmd;
+ reg  [1 :0] csr_crmd_plv;
+ reg         csr_crmd_ie;
+ //below should be down in virtual memory
+-wire        csr_crmd_da;
+-wire        csr_crmd_pg;
+-wire [1 :0] csr_crmd_datf;
+-wire [1 :0] csr_crmd_datm;
++reg         csr_crmd_da;
++reg         csr_crmd_pg;
++reg  [1 :0] csr_crmd_datf;
++reg  [1 :0] csr_crmd_datm;
+ //crmd end
+ //prmd start
+ wire [31:0] csr_prmd;
+@@ -187,82 +261,53 @@
+ reg  [19:0] tlbrentry_ppn;
+ wire [31:0] csr_tlbrentry;
+ //tlbrentry end
++//dmw0 start
++reg         dmw0_plv0;
++reg         dmw0_plv3;
++reg  [1 :0] dmw0_mat;
++reg  [2 :0] dmw0_pseg;
++reg  [2 :0] dmw0_vseg;
++wire [31:0] csr_dmw0;
++//dmw0 end
++//dmw1 start
++reg         dmw1_plv0;
++reg         dmw1_plv3;
++reg  [1 :0] dmw1_mat;
++reg  [2 :0] dmw1_pseg;
++reg  [2 :0] dmw1_vseg;
++wire [31:0] csr_dmw1;
++//dmw1 end
+ //csr regs end
+ 
+ wire        wb_ex;
+-wire        int,adef,ale,brk,ine,sys;
++wire        int,pil,pis,pif,pme,if_ppi,exe_ppi,adef,ale,sys,brk,ine,if_tlbr,exe_tlbr;
+ wire        break;
+ //non-sense wire
+ wire [7 :0] hw_int_in;
+ wire [31:0] core_id;
+ wire        wb_ex_addr_err;
++wire        vppn_err;
+ //tlb related wire
+ wire        inst_tlbsrch;
+ wire        inst_tlbrd;
+ wire        inst_tlbwr;
+ wire        inst_tlbfill;
+-wire        inst_invtlb;
+ //wire to handle tlb
+-//search port1
+-wire [18:0] s1_vppn;
+-wire        s1_va_bit12;
+-wire [ 9:0] s1_asid;
+-wire         s1_found;
+-wire [3 :0]  s1_index;
+-wire [19:0]  s1_ppn;
+-wire [ 5:0]  s1_ps;
+-wire [ 1:0]  s1_plv;
+-wire [ 1:0]  s1_mat;
+-wire         s1_d;
+-wire         s1_v;
+-//write port
+-wire         tlb_we; //w(rite) e(nable)
+-wire [3 :0]  w_index;
+-wire         w_e;
+-wire [18:0]  w_vppn;
+-wire [ 5:0]  w_ps;
+-wire [ 9:0]  w_asid;
+-wire         w_g;
+-wire [19:0]  w_ppn0;
+-wire [ 1:0]  w_plv0;
+-wire [ 1:0]  w_mat0;
+-wire         w_d0;
+-wire         w_v0;
+-wire [19:0]  w_ppn1;
+-wire [ 1:0]  w_plv1;
+-wire [ 1:0]  w_mat1;
+-wire         w_d1;
+-wire         w_v1;
+-// read port
+-wire [3 :0]  r_index;
+-wire         r_e;
+-wire [18:0]  r_vppn;
+-wire [ 5:0]  r_ps;
+-wire [ 9:0]  r_asid;
+-wire         r_g;
+-wire [19:0]  r_ppn0;
+-wire [ 1:0]  r_plv0;
+-wire [ 1:0]  r_mat0;
+-wire         r_d0;
+-wire         r_v0;
+-wire [19:0]  r_ppn1;
+-wire [ 1:0]  r_plv1;
+-wire [ 1:0]  r_mat1;
+-wire         r_d1;
+-wire         r_v1;
+-
+-
+-assign {int,adef,ale,brk,ine,sys} = exc;
+-assign wb_ex = int | adef | ale | brk | ine | sys;
+-assign wb_ecode = int ? 6'h0 : adef ? 6'h08 : ine ? 6'h0D : sys ? 6'hB : 
+-                  brk ? 6'hc : 6'h9;
++
++
++assign {int,pil,pis,pif,pme,if_ppi,exe_ppi,adef,ale,sys,brk,ine,if_tlbr,exe_tlbr} = exc;
++assign wb_ex = int | pil | pis | pif | pme | if_ppi | exe_ppi | adef | ale | sys | brk | ine | if_tlbr | exe_tlbr;
++assign wb_ecode = int ? 6'h0 : adef ? 6'h8 : if_tlbr ? 6'h3f : pif ? 6'h3 : if_ppi ? 6'h7 : sys ? 6'hb : 
++                  brk ? 6'hc : ine ? 6'hd : ale ? 6'h9 : exe_tlbr ? 6'h3f : pil ? 6'h1 : pis ? 6'h2 : exe_ppi ?
++                  6'h7 : 6'h4;
+ assign wb_esubcode = 9'b0;
+ assign hw_int_in = 8'b0;
+ assign core_id = 32'b0;
+ assign has_int = ((|(csr_estat_is[12:0] & csr_ecfg_lie[12:0])) & csr_crmd_ie);
+-assign wb_ex_addr_err = adef | ale;
++assign wb_ex_addr_err = pil | pis | pif | pme | if_ppi | exe_ppi | adef | ale | if_tlbr | exe_tlbr;
++assign vppn_err = pil | pis | pif | pme | if_ppi | exe_ppi | if_tlbr | exe_tlbr;
+ //tlb
+-assign {inst_tlbsrch,inst_tlbwr,inst_tlbfill,inst_tlbrd,inst_invtlb} = tlb_inst;
++assign {inst_tlbsrch,inst_tlbwr,inst_tlbfill,inst_tlbrd} = tlb_inst;
+ //crmd start
+ always @(posedge clk ) begin
+     if(~resetn)
+@@ -288,10 +333,42 @@
+                        | ~csr_wr_mask[CSR_CRMD_IE] & csr_crmd_ie;
+ end
+ //virtual memory
+-assign csr_crmd_da   = 1'b1;
+-assign csr_crmd_pg   = 1'b0;
+-assign csr_crmd_datf = 2'b00;
+-assign csr_crmd_datm = 2'b00;
++always @(posedge clk ) begin
++    if(~resetn)
++        csr_crmd_da <= 1'b1;
++    else if(if_tlbr | exe_tlbr)
++        csr_crmd_da <= 1'b1;
++    else if(ertn_flush & csr_estat_ecode == 6'h3f)
++        csr_crmd_da <= 1'b0;
++    else if(csr_we && csr_wr_num == CSR_CRMD)
++        csr_crmd_da <= csr_wr_mask[CSR_CRMD_DA] & csr_wr_value[CSR_CRMD_DA]
++                       | ~csr_wr_mask[CSR_CRMD_DA] & csr_crmd_da;
++end
++always @(posedge clk ) begin
++    if(~resetn)
++        csr_crmd_pg <= 1'b0;
++    else if(exe_tlbr | if_tlbr)
++        csr_crmd_pg <= 1'b0;
++    else if(ertn_flush & csr_estat_ecode == 6'h3f)
++        csr_crmd_pg <= 1'b1;
++    else if(csr_we && csr_wr_num == CSR_CRMD)
++        csr_crmd_pg <= csr_wr_mask[CSR_CRMD_PG] & csr_wr_value[CSR_CRMD_PG]
++                       | ~csr_wr_mask[CSR_CRMD_PG] & csr_crmd_pg;
++end
++always @(posedge clk ) begin
++    if(~resetn)
++        csr_crmd_datf <= 2'b0;
++    else if(csr_we && csr_wr_num == CSR_CRMD)
++        csr_crmd_datf <= csr_wr_mask[CSR_CRMD_DATF_END:CSR_CRMD_DATF_START] & csr_wr_value[CSR_CRMD_DATF_END:CSR_CRMD_DATF_START]
++                       | ~csr_wr_mask[CSR_CRMD_DATF_END:CSR_CRMD_DATF_START] & csr_crmd_datf;
++end
++always @(posedge clk ) begin
++    if(~resetn)
++        csr_crmd_datm <= 2'b0;
++    else if(csr_we && csr_wr_num == CSR_CRMD)
++        csr_crmd_datm <= csr_wr_mask[CSR_CRMD_DATM_END:CSR_CRMD_DATM_START] & csr_wr_value[CSR_CRMD_DATM_END:CSR_CRMD_DATM_START]
++                       | ~csr_wr_mask[CSR_CRMD_DATM_END:CSR_CRMD_DATM_START] & csr_crmd_datm;
++end
+ //crmd end
+ 
+ assign csr_crmd = {23'b0,csr_crmd_datm,csr_crmd_datf,csr_crmd_pg,csr_crmd_da,csr_crmd_ie,csr_crmd_plv};
+@@ -376,7 +453,7 @@
+ //badv start
+ always @(posedge clk ) begin
+     if(wb_ex & wb_ex_addr_err)
+-        csr_badv_pc <= (adef)? wb_pc: wb_fault_vaddr;//not support virtual memory
++        csr_badv_pc <= (adef | pif | if_ppi | if_tlbr)? wb_pc: wb_fault_vaddr;//now support virtual memory
+ end
+ assign csr_badv = csr_badv_pc;
+ //badv end
+@@ -519,6 +596,8 @@
+         tlbehi_vppn <= csr_wr_mask[CSR_TLBEHI_VPPN_END:CSR_TLBEHI_VPPN_START] & csr_wr_value[CSR_TLBEHI_VPPN_END:CSR_TLBEHI_VPPN_START]
+                      | ~csr_wr_mask[CSR_TLBEHI_VPPN_END:CSR_TLBEHI_VPPN_START] & tlbehi_vppn;
+     end
++    else if(vppn_err)
++        tlbehi_vppn <= (pif | if_ppi | if_tlbr)? wb_pc[31:13]: wb_fault_vaddr[31:13];
+     else if(inst_tlbrd)begin
+         if(r_e)
+             tlbehi_vppn <= r_vppn;
+@@ -728,7 +807,56 @@
+         tlbrentry_ppn <= csr_wr_mask[CSR_TLBRENTRY_PPN_END:CSR_TLBRENTRY_PPN_START] & csr_wr_value[CSR_TLBRENTRY_PPN_END:CSR_TLBRENTRY_PPN_START]
+                          | ~csr_wr_mask[CSR_TLBRENTRY_PPN_END:CSR_TLBRENTRY_PPN_START] & tlbrentry_ppn;
+ end
++assign csr_tlbrentry = {tlbrentry_ppn,12'b0};
+ //tlbrentry end
++//dmw0 start
++always @(posedge clk ) begin
++    if(~resetn)begin
++        dmw0_plv0 <= 1'b0;
++        dmw0_plv3 <= 1'b0;
++        dmw0_mat <= 2'b0;
++        dmw0_pseg <= 3'b0;
++        dmw0_vseg <= 3'b0;
++    end
++    else if(csr_we && csr_wr_num == CSR_DMW0)begin
++        dmw0_plv0 <= csr_wr_mask[CSR_DMW_PLV0] & csr_wr_value[CSR_DMW_PLV0]
++                     | ~csr_wr_mask[CSR_DMW_PLV0] & dmw0_plv0;
++        dmw0_plv3 <= csr_wr_mask[CSR_DMW_PLV3] & csr_wr_value[CSR_DMW_PLV3]
++                     | ~csr_wr_mask[CSR_DMW_PLV3] & dmw0_plv3;
++        dmw0_mat  <= csr_wr_mask[CSR_DMW_MAT_END:CSR_DMW_MAT_START] & csr_wr_value[CSR_DMW_MAT_END:CSR_DMW_MAT_START]
++                     | ~csr_wr_mask[CSR_DMW_MAT_END:CSR_DMW_MAT_START] & dmw0_mat;
++        dmw0_pseg <= csr_wr_mask[CSR_DMW_PSEG_END:CSR_DMW_PSEG_START] & csr_wr_value[CSR_DMW_PSEG_END:CSR_DMW_PSEG_START]
++                     | ~csr_wr_mask[CSR_DMW_PSEG_END:CSR_DMW_PSEG_START] & dmw0_mat;
++        dmw0_vseg <= csr_wr_mask[CSR_DMW_VSEG_END:CSR_DMW_VSEG_START] & csr_wr_value[CSR_DMW_VSEG_END:CSR_DMW_VSEG_START]
++                     | ~csr_wr_mask[CSR_DMW_VSEG_END:CSR_DMW_VSEG_START] & dmw0_mat;
++    end
++end
++assign csr_dmw0 = {dmw0_vseg,1'b0,dmw0_pseg,19'b0,dmw0_mat,dmw0_plv3,2'b0,dmw0_plv0};
++//dmw0 end
++//dmw1 start
++always @(posedge clk ) begin
++    if(~resetn)begin
++        dmw1_plv0 <= 1'b0;
++        dmw1_plv3 <= 1'b0;
++        dmw1_mat <= 2'b0;
++        dmw1_pseg <= 3'b0;
++        dmw1_vseg <= 3'b0;
++    end
++    else if(csr_we && csr_wr_num == CSR_DMW1)begin
++        dmw1_plv0 <= csr_wr_mask[CSR_DMW_PLV0] & csr_wr_value[CSR_DMW_PLV0]
++                     | ~csr_wr_mask[CSR_DMW_PLV0] & dmw1_plv0;
++        dmw1_plv3 <= csr_wr_mask[CSR_DMW_PLV3] & csr_wr_value[CSR_DMW_PLV3]
++                     | ~csr_wr_mask[CSR_DMW_PLV3] & dmw1_plv3;
++        dmw1_mat  <= csr_wr_mask[CSR_DMW_MAT_END:CSR_DMW_MAT_START] & csr_wr_value[CSR_DMW_MAT_END:CSR_DMW_MAT_START]
++                     | ~csr_wr_mask[CSR_DMW_MAT_END:CSR_DMW_MAT_START] & dmw1_mat;
++        dmw1_pseg <= csr_wr_mask[CSR_DMW_PSEG_END:CSR_DMW_PSEG_START] & csr_wr_value[CSR_DMW_PSEG_END:CSR_DMW_PSEG_START]
++                     | ~csr_wr_mask[CSR_DMW_PSEG_END:CSR_DMW_PSEG_START] & dmw1_mat;
++        dmw1_vseg <= csr_wr_mask[CSR_DMW_VSEG_END:CSR_DMW_VSEG_START] & csr_wr_value[CSR_DMW_VSEG_END:CSR_DMW_VSEG_START]
++                     | ~csr_wr_mask[CSR_DMW_VSEG_END:CSR_DMW_VSEG_START] & dmw1_mat;
++    end
++end
++assign csr_dmw1 = {dmw1_vseg,1'b0,dmw1_pseg,19'b0,dmw1_mat,dmw1_plv3,2'b0,dmw1_plv0};
++//dmw1 end
+ assign csr_rd_value = {32{csr_re}}
+                       & ( {32{csr_rd_num == CSR_CRMD}} & csr_crmd
+                         | {32{csr_rd_num == CSR_PRMD}} & csr_prmd
+@@ -750,16 +878,29 @@
+                         | {32{csr_rd_num == CSR_TLBELO0}} & csr_tlbelo0
+                         | {32{csr_rd_num == CSR_TLBELO1}} & csr_tlbelo1
+                         | {32{csr_rd_num == CSR_ASID}} & csr_asid
+-                        | {32{csr_rd_num == CSR_TLBRENTRY}} & csr_tlbrentry);
++                        | {32{csr_rd_num == CSR_TLBRENTRY}} & csr_tlbrentry
++                        | {32{csr_rd_num == CSR_DMW0}} & csr_dmw0
++                        | {32{csr_rd_num == CSR_DMW1}} & csr_dmw1);
+ assign csr_eentry_pc = csr_eentry;
+ assign csr_eertn_pc  = csr_era;
++assign csr_tlbrentry_pc = csr_tlbrentry;
+ assign s1_va_bit12   = 1'b0;
+-
++//csr connection to tlb
++assign asid             = asid_asid;
++assign plv              = csr_crmd_plv;
++assign csr_tlbsrch      = inst_tlbsrch;
++assign da               = csr_crmd_da;
++assign pg               = csr_crmd_pg;
++assign csr_dmw0_plv0    = dmw0_plv0;
++assign csr_dmw0_plv3    = dmw0_plv3;
++assign csr_dmw0_vseg    = dmw0_vseg;
++assign csr_dmw0_pseg    = dmw0_pseg;
++assign csr_dmw1_plv0    = dmw1_plv0;
++assign csr_dmw1_plv3    = dmw1_plv3;
++assign csr_dmw1_vseg    = dmw1_vseg;
++assign csr_dmw1_pseg    = dmw1_pseg;
+ //tlb search
+-assign s0_asid       = asid_asid;
+-assign s0_vppn       = 0;
+-assign s1_asid       = {10{inst_invtlb}} & inv_asid | {10{~inst_invtlb}} & asid_asid;
+-assign s1_vppn       = {19{inst_invtlb}} & inv_vppn | {19{~inst_invtlb}} & tlbehi_vppn;
++assign s1_vppn       = tlbehi_vppn;
+ 
+ //tlb read
+ assign r_index      = tlbidx_index;
+@@ -783,74 +924,74 @@
+ assign w_d1         = tlbelo1_d;
+ assign w_v1         = tlbelo1_v;
+ 
+-tlb mytlb(
+-    .clk(clk),
+-
+-    // search port 0 (for fetch)
+-    .s0_vppn(s0_vppn),
+-    .s0_va_bit12(s0_va_bit12),
+-    .s0_asid(s0_asid),
+-    .s0_found(s0_found),
+-    .s0_index(s0_index),
+-    .s0_ppn(s0_ppn),
+-    .s0_ps(s0_ps),
+-    .s0_plv(s0_plv),
+-    .s0_mat(s0_mat),
+-    .s0_d(s0_d),
+-    .s0_v(s0_v),
+-
+-    // search port 1 (for load/store)
+-    .s1_vppn(s1_vppn),
+-    .s1_va_bit12(s1_va_bit12),
+-    .s1_asid(s1_asid),
+-    .s1_found(s1_found),
+-    .s1_index(s1_index),
+-    .s1_ppn(s1_ppn),
+-    .s1_ps(s1_ps),
+-    .s1_plv(s1_plv),
+-    .s1_mat(s1_mat),
+-    .s1_d(s1_d),
+-    .s1_v(s1_v),
+-
+-    // invtlb opcode
+-    .invtlb_valid(inst_invtlb),
+-    .invtlb_op(invtlb_op),
+-
+-    // write port
+-    .we(tlb_we), //w(rite) e(nable)
+-    .w_index(w_index),
+-    .w_e(w_e),
+-    .w_vppn(w_vppn),
+-    .w_ps(w_ps),
+-    .w_asid(w_asid),
+-    .w_g(w_g),
+-    .w_ppn0(w_ppn0),
+-    .w_plv0(w_plv0),
+-    .w_mat0(w_mat0),
+-    .w_d0(w_d0),
+-    .w_v0(w_v0),
+-    .w_ppn1(w_ppn1),
+-    .w_plv1(w_plv1),
+-    .w_mat1(w_mat1),
+-    .w_d1(w_d1),
+-    .w_v1(w_v1),
+-
+-    // read port
+-    .r_index(r_index),
+-    .r_e(r_e),
+-    .r_vppn(r_vppn),
+-    .r_ps(r_ps),
+-    .r_asid(r_asid),
+-    .r_g(r_g),
+-    .r_ppn0(r_ppn0),
+-    .r_plv0(r_plv0),
+-    .r_mat0(r_mat0),
+-    .r_d0(r_d0),
+-    .r_v0(r_v0),
+-    .r_ppn1(r_ppn1),
+-    .r_plv1(r_plv1),
+-    .r_mat1(r_mat1),
+-    .r_d1(r_d1),
+-    .r_v1(r_v1)
+-);
++// tlb mytlb(
++//     .clk(clk),
++
++//     // search port 0 (for fetch)
++//     .s0_vppn(s0_vppn),
++//     .s0_va_bit12(s0_va_bit12),
++//     .s0_asid(s0_asid),
++//     .s0_found(s0_found),
++//     .s0_index(s0_index),
++//     .s0_ppn(s0_ppn),
++//     .s0_ps(s0_ps),
++//     .s0_plv(s0_plv),
++//     .s0_mat(s0_mat),
++//     .s0_d(s0_d),
++//     .s0_v(s0_v),
++
++//     // search port 1 (for load/store)
++//     .s1_vppn(s1_vppn),
++//     .s1_va_bit12(s1_va_bit12),
++//     .s1_asid(s1_asid),
++//     .s1_found(s1_found),
++//     .s1_index(s1_index),
++//     .s1_ppn(s1_ppn),
++//     .s1_ps(s1_ps),
++//     .s1_plv(s1_plv),
++//     .s1_mat(s1_mat),
++//     .s1_d(s1_d),
++//     .s1_v(s1_v),
++
++//     // invtlb opcode
++//     .invtlb_valid(inst_invtlb),
++//     .invtlb_op(invtlb_op),
++
++//     // write port
++//     .we(tlb_we), //w(rite) e(nable)
++//     .w_index(w_index),
++//     .w_e(w_e),
++//     .w_vppn(w_vppn),
++//     .w_ps(w_ps),
++//     .w_asid(w_asid),
++//     .w_g(w_g),
++//     .w_ppn0(w_ppn0),
++//     .w_plv0(w_plv0),
++//     .w_mat0(w_mat0),
++//     .w_d0(w_d0),
++//     .w_v0(w_v0),
++//     .w_ppn1(w_ppn1),
++//     .w_plv1(w_plv1),
++//     .w_mat1(w_mat1),
++//     .w_d1(w_d1),
++//     .w_v1(w_v1),
++
++//     // read port
++//     .r_index(r_index),
++//     .r_e(r_e),
++//     .r_vppn(r_vppn),
++//     .r_ps(r_ps),
++//     .r_asid(r_asid),
++//     .r_g(r_g),
++//     .r_ppn0(r_ppn0),
++//     .r_plv0(r_plv0),
++//     .r_mat0(r_mat0),
++//     .r_d0(r_d0),
++//     .r_v0(r_v0),
++//     .r_ppn1(r_ppn1),
++//     .r_plv1(r_plv1),
++//     .r_mat1(r_mat1),
++//     .r_d1(r_d1),
++//     .r_v1(r_v1)
++// );
+ endmodule
