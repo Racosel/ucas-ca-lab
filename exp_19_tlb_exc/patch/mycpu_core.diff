@@ -1,0 +1,354 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\mycpu_core.v
++++ E:\calab\ucas-ca-lab\exp_19_tlb_exc\myCPU\mycpu_core.v
+@@ -78,21 +78,21 @@
+     wire        exec_flush;
+     wire        cancel_exc_ertn_tlbflush;
+     // wire        cancel_exc_ertn_tlbflush_mem;
+-    wire        if_exc_rf;//if exc
++    wire [3 :0] if_exc_rf;//if exc
+ 
+     wire [31:0] csr_rd_value;
+     wire        csr_re;
+     wire [13:0] csr_rd_num;
+-    wire [5 :0] id_exc_rf;
++    wire [8 :0] id_exc_rf;
+     wire [79:0] id_csr_rf;//id exc
+     wire [1 :0] id_timer_rf;
+     wire        has_int;
+ 
+     wire [63:0] current_time;
+-    wire [6 :0] exe_exc_rf;
++    wire [14:0] exe_exc_rf;
+     wire [79:0] exe_csr_rf;//exe exc
+ 
+-    wire [6 :0] mem_exc_rf;
++    wire [14:0] mem_exc_rf;
+     wire [79:0] mem_csr_rf;//mem exc
+     wire [31:0] mem_fault_vaddr;
+ 
+@@ -102,27 +102,173 @@
+     wire        csr_we;//wb exc
+     wire [31:0] wb_fault_vaddr;
+     wire        mem_pipeline_block;
+-    wire [5 :0] wb_exc;
++    wire [13:0] wb_exc;
+ 
+     //tlb related
+-    wire        tlb_flush;
++    wire        tlb_flush;//change to tlb
+     wire [31:0] tlb_flush_addr;
++    wire        tlbr_flush;
++    wire [31:0] tlbrentry_pc;
+ 
+     wire [9 :0] id_tlb_rf;
+ 
+     wire [2 :0] exe_tlb_rf;
+-    wire        exe_tlbsrch,exe_invtlb;
++    wire        csr_tlbsrch,exe_invtlb;
+     wire [9 :0] exe_invasid;
+     wire [18:0] exe_invvppn;
+     wire [4 :0] tlb_op;
+-
++    //tlb related wire
+     wire [2 :0] mem_tlb_rf;
+     wire        wb_tlbwr,wb_tlbfill,wb_tlbrd;
+-    wire [4 :0] tlb_inst;
+-    assign exec_flush      = |wb_exc;
+-    assign cancel_exc_ertn_tlbflush = ertn_flush | exec_flush | tlb_flush;
+-    assign tlb_inst = {exe_tlbsrch,wb_tlbwr,wb_tlbfill,wb_tlbrd,exe_invtlb};
++    wire [3 :0] tlb_inst;
++    wire [31:0] pre_if_vaddr;
++    wire [2 :0] s0_exc;
++    wire [31:0] exe_vaddr;
++    wire [4 :0] s1_exc;
++    wire        exe_wr_rd;
++    //csr-tlb wire
++    wire [9 :0] asid;
++    wire [1 :0] plv;
++    wire        da;
++    wire        pg;
++    wire        dmw0_plv0;
++    wire        dmw0_plv3;
++    wire [2 :0] dmw0_vseg;
++    wire [2 :0] dmw0_pseg;
++    wire        dmw1_plv0;
++    wire        dmw1_plv3;
++    wire [2 :0] dmw1_vseg;
++    wire [2 :0] dmw1_pseg;
++    //tlbrsch
++    wire [18:0] csr_s1_vppn;
++    wire        csr_s1_found;
++    wire [3 :0] csr_s1_index;
++    wire [19:0] csr_s1_ppn;
++    wire [5 :0] csr_s1_ps;
++    wire [1 :0] csr_s1_plv;
++    wire [1 :0] csr_s1_mat;
++    wire        csr_s1_d;
++    wire        csr_s1_v;
++    //tlbwr
++    wire        csr_tlb_we;
++    wire [3 :0] csr_w_index;
++    wire        csr_w_e;
++    wire [18:0] csr_w_vppn;
++    wire [ 5:0] csr_w_ps;
++    wire [ 9:0] csr_w_asid;
++    wire        csr_w_g;
++    wire [19:0] csr_w_ppn0;
++    wire [ 1:0] csr_w_plv0;
++    wire [ 1:0] csr_w_mat0;
++    wire        csr_w_d0;
++    wire        csr_w_v0;
++    wire [19:0] csr_w_ppn1;
++    wire [ 1:0] csr_w_plv1;
++    wire [ 1:0] csr_w_mat1;
++    wire        csr_w_d1;
++    wire        csr_w_v1;
++    //tlbrd
++    wire [3 :0] csr_r_index;
++    wire        csr_r_e;
++    wire [18:0] csr_r_vppn;
++    wire [ 5:0] csr_r_ps;
++    wire [ 9:0] csr_r_asid;
++    wire        csr_r_g;
++    wire [19:0] csr_r_ppn0;
++    wire [ 1:0] csr_r_plv0;
++    wire [ 1:0] csr_r_mat0;
++    wire        csr_r_d0;
++    wire        csr_r_v0;
++    wire [19:0] csr_r_ppn1;
++    wire [ 1:0] csr_r_plv1;
++    wire [ 1:0] csr_r_mat1;
++    wire        csr_r_d1;
++    wire        csr_r_v1;
++
++
++    assign exec_flush      = |wb_exc[13:1];
++    assign tlbr_flush      = wb_exc[0];
++    assign cancel_exc_ertn_tlbflush = ertn_flush | exec_flush | tlb_flush | tlbr_flush;
++    assign tlb_inst = {exe_tlbsrch,wb_tlbwr,wb_tlbfill,wb_tlbrd};
+     // assign cancel_exc_ertn_tlbflush_mem = cancel_exc_ertn_tlbflush | (|mem_exc_rf);
++
++    mmu mmu_inst(
++        .clk(clk),
++    //user related tlb signals
++        .pre_if_vaddr(pre_if_vaddr),
++        .pre_if_addr(inst_sram_addr),
++        .s0_exc(s0_exc),//{s0_pif,s0_ppi,s0_tlbr}
++        .exe_vaddr(exe_vaddr),
++        .exe_wr_rd(exe_wr_rd),
++        .exe_wr(data_sram_wr),
++        .exe_addr(data_sram_addr),
++        .s1_exc(s1_exc),//{s1_pil,s1_pis,s1_pme,s1_ppi,s1_tlbr}
++    //kernel related tlb signals
++        .asid(asid),
++        .plv(plv),
++        .inst_tlbsrch(csr_tlbsrch),
++        .inst_invtlb(exe_invtlb),
++        .da(da),
++        .pg(pg),
++        .dmw0_plv0(dmw0_plv0),
++        .dmw0_plv3(dmw0_plv3),
++        .dmw0_vseg(dmw0_vseg),
++        .dmw0_pseg(dmw0_pseg),
++        .dmw1_plv0(dmw1_plv0),
++        .dmw1_plv3(dmw1_plv3),
++        .dmw1_vseg(dmw1_vseg),
++        .dmw1_pseg(dmw1_pseg),
++    //tlbrsch
++        .csr_s1_vppn(csr_s1_vppn),
++        .csr_s1_found(csr_s1_found),
++        .csr_s1_index(csr_s1_index),
++        .csr_s1_ppn(csr_s1_ppn),
++        .csr_s1_ps(csr_s1_ps),
++        .csr_s1_plv(csr_s1_plv),
++        .csr_s1_mat(csr_s1_mat),
++        .csr_s1_d(csr_s1_d),
++        .csr_s1_v(csr_s1_v),
++    //tlbwr
++        .csr_tlb_we(csr_tlb_we),
++        .csr_w_index(csr_w_index),
++        .csr_w_e(csr_w_e),
++        .csr_w_vppn(csr_w_vppn),
++        .csr_w_ps(csr_w_ps),
++        .csr_w_asid(csr_w_asid),
++        .csr_w_g(csr_w_g),
++        .csr_w_ppn0(csr_w_ppn0),
++        .csr_w_plv0(csr_w_plv0),
++        .csr_w_mat0(csr_w_mat0),
++        .csr_w_d0(csr_w_d0),
++        .csr_w_v0(csr_w_v0),
++        .csr_w_ppn1(csr_w_ppn1),
++        .csr_w_plv1(csr_w_plv1),
++        .csr_w_mat1(csr_w_mat1),
++        .csr_w_d1(csr_w_d1),
++        .csr_w_v1(csr_w_v1),
++    //tlbrd
++        .csr_r_index(csr_r_index),
++        .csr_r_e(csr_r_e),
++        .csr_r_vppn(csr_r_vppn),
++        .csr_r_ps(csr_r_ps),
++        .csr_r_asid(csr_r_asid),
++        .csr_r_g(csr_r_g),
++        .csr_r_ppn0(csr_r_ppn0),
++        .csr_r_plv0(csr_r_plv0),
++        .csr_r_mat0(csr_r_mat0),
++        .csr_r_d0(csr_r_d0),
++        .csr_r_v0(csr_r_v0),
++        .csr_r_ppn1(csr_r_ppn1),
++        .csr_r_plv1(csr_r_plv1),
++        .csr_r_mat1(csr_r_mat1),
++        .csr_r_d1(csr_r_d1),
++        .csr_r_v1(csr_r_v1),
++    //invtlb signals
++        .invtlb_op(tlb_op),
++        .inv_vppn(exe_invvppn),
++        .inv_asid(exe_invasid)
++    );
++
+     IFstate ifstate(
+         .clk(clk),
+         .resetn(resetn),
+@@ -132,7 +278,7 @@
+         .inst_sram_wr(inst_sram_wr),
+         .inst_sram_size(inst_sram_size),
+         .inst_sram_wstrb(inst_sram_wstrb),
+-        .inst_sram_addr(inst_sram_addr),
++        // .inst_sram_addr(inst_sram_addr),
+         .inst_sram_wdata(inst_sram_wdata),
+         .inst_sram_addr_ok(inst_sram_addr_ok),
+         .inst_sram_data_ok(inst_sram_data_ok),
+@@ -149,13 +295,18 @@
+         .if_pc(if_pc),
+         .ertn_pc(ertn_pc),
+         .exec_pc(exec_pc),
++        .tlbrentry_pc(tlbrentry_pc),
+         .ertn_flush(ertn_flush),
+         .exec_flush(exec_flush),
++        .tlbr_flush(tlbr_flush),
+         .if_exc_rf(if_exc_rf),
+ 
+         //tlb rf
+         .tlb_flush(tlb_flush),
+-        .tlb_flush_addr(tlb_flush_addr)
++        .tlb_flush_addr(tlb_flush_addr),
++        //tlb translate
++        .pre_if_vaddr(pre_if_vaddr),
++        .s0_exc(s0_exc)
+     );
+ 
+     IDstate idstate(
+@@ -234,7 +385,7 @@
+         .data_sram_wr(data_sram_wr),
+         .data_sram_size(data_sram_size),
+         .data_sram_wstrb(data_sram_wstrb),
+-        .data_sram_addr(data_sram_addr),
++        // .data_sram_addr(data_sram_addr),
+         .data_sram_wdata(data_sram_wdata),
+         .data_sram_addr_ok(data_sram_addr_ok),
+ 
+@@ -247,14 +398,17 @@
+         .exe_exc_rf(exe_exc_rf),
+         .exe_csr_rf(exe_csr_rf),
+ 
+-        //tlb rf
++    //tlb rf
+         .id_tlb_rf(id_tlb_rf),
+         .exe_tlb_rf(exe_tlb_rf),
+         .exe_tlbsrch(exe_tlbsrch),
+         .exe_invtlb(exe_invtlb),
+         .exe_invasid(exe_invasid),
+         .exe_invvppn(exe_invvppn),
+-        .tlb_op(tlb_op)
++        .tlb_op(tlb_op),
++        .exe_vaddr(exe_vaddr),
++        .s1_exc(s1_exc),
++        .exe_wr_rd(exe_wr_rd)
+     );
+ 
+     MEMstate memstate(
+@@ -289,7 +443,7 @@
+         .mem_fault_vaddr(mem_fault_vaddr),
+         .mem_pipeline_block(mem_pipeline_block),
+ 
+-        //tlb rf
++    //tlb rf
+         .exe_tlb_rf(exe_tlb_rf),
+         .mem_tlb_rf(mem_tlb_rf)
+     ) ;
+@@ -350,13 +504,70 @@
+         .csr_rd_value(csr_rd_value),
+         .csr_eentry_pc(exec_pc),
+         .csr_eertn_pc(ertn_pc),
++        .csr_tlbrentry_pc(tlbrentry_pc),
+         .has_int(has_int),
+-
+-        //tlb rf
+-        .tlb_inst(tlb_inst),//{inst_tlbsrch,inst_tlbwr,inst_tlbfill,inst_tlbrd,inst_invtlb}
+-        .invtlb_op(tlb_op),
+-        .inv_vppn(exe_invvppn),
+-        .inv_asid(exe_invasid)
++    //tlb rf
++        .tlb_inst(tlb_inst),
++    //tlb related control
++        .asid(asid),
++        .plv(plv),
++        .csr_tlbsrch(csr_tlbsrch),
++        .da(da),
++        .pg(pg),
++        .csr_dmw0_plv0(dmw0_plv0),
++        .csr_dmw0_plv3(dmw0_plv3),
++        .csr_dmw0_vseg(dmw0_vseg),
++        .csr_dmw0_pseg(dmw0_pseg),
++        .csr_dmw1_plv0(dmw1_plv0),
++        .csr_dmw1_plv3(dmw1_plv3),
++        .csr_dmw1_vseg(dmw1_vseg),
++        .csr_dmw1_pseg(dmw1_pseg),
++    //tlb wire
++    //search port1
++        .s1_vppn(csr_s1_vppn),
++        .s1_found(csr_s1_found),
++        .s1_index(csr_s1_index),
++        .s1_ppn(csr_s1_ppn),
++        .s1_ps(csr_s1_ps),
++        .s1_plv(csr_s1_plv),
++        .s1_mat(csr_s1_mat),
++        .s1_d(csr_s1_d),
++        .s1_v(csr_s1_v),
++    //write port
++        .tlb_we(csr_tlb_we),
++        .w_index(csr_w_index),
++        .w_e(csr_w_e),
++        .w_vppn(csr_w_vppn),
++        .w_ps(csr_w_ps),
++        .w_asid(csr_w_asid),
++        .w_g(csr_w_g),
++        .w_ppn0(csr_w_ppn0),
++        .w_plv0(csr_w_plv0),
++        .w_mat0(csr_w_mat0),
++        .w_d0(csr_w_d0),
++        .w_v0(csr_w_v0),
++        .w_ppn1(csr_w_ppn1),
++        .w_plv1(csr_w_plv1),
++        .w_mat1(csr_w_mat1),
++        .w_d1(csr_w_d1),
++        .w_v1(csr_w_v1),
++    // read port
++        .r_index(csr_r_index),
++        .r_e(csr_r_e),
++        .r_vppn(csr_r_vppn),
++        .r_ps(csr_r_ps),
++        .r_asid(csr_r_asid),
++        .r_g(csr_r_g),
++        .r_ppn0(csr_r_ppn0),
++        .r_plv0(csr_r_plv0),
++        .r_mat0(csr_r_mat0),
++        .r_d0(csr_r_d0),
++        .r_v0(csr_r_v0),
++        .r_ppn1(csr_r_ppn1),
++        .r_plv1(csr_r_plv1),
++        .r_mat1(csr_r_mat1),
++        .r_d1(csr_r_d1),
++        .r_v1(csr_r_v1)
+     );
+ 
+     cpu_timer localtimer(

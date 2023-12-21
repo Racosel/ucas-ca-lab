@@ -1,0 +1,108 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\MEMstate.v
++++ E:\calab\ucas-ca-lab\exp_16_axi_rand_delay\myCPU\MEMstate.v
+@@ -15,8 +15,7 @@
+     input       [31:0] exe_rkd_value,
+     // memstate -> wbstate
+     input              wb_allowin,
+-    // output      [53:0] mem_rf_all, // {mem_rf_we, mem_rf_waddr, mem_rf_wdata} if is ld, can't use data directly
+-    output      [38:0] mem_rf_all,
++    output      [53:0] mem_rf_all, // {mem_rf_we, mem_rf_waddr, mem_rf_wdata} if is ld, can't use data directly
+     output             mem_to_wb_valid,
+     output reg  [31:0] mem_pc,
+ 
+@@ -32,24 +31,15 @@
+     input  wire [31:0] data_sram_rdata, 
+ 
+     //exc
+-    input              cancel_exc_ertn_tlbflush,//canceled by exception or ereturn
+-    input       [79:0] exe_csr_rf,//{csr_rd,csr_wr,mem_csr_num,csr_rd_value,csr_mask,csr_wvalue}
++    input              cancel_exc_ertn,//canceled by exception or ereturn
++    input       [78:0] exe_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+     input       [6 :0] exe_exc_rf,//{INT,ADEF,BRK,INE,SYS,ertn}
+     output      [6 :0] mem_exc_rf,//{INT,ADEF,ALE,BRK,INE,SYS,ertn}
+-    output reg  [79:0] mem_csr_rf,//{csr_rd,csr_wr,mem_csr_num,csr_rd_value,csr_mask,csr_wvalue}
++    output reg  [78:0] mem_csr_rf,//{ertn,csr_rd,csr_wr,mem_csr_wr_num,csr_rd_value,csr_mask,csr_wvalue}
+     output      [31:0] mem_fault_vaddr,
+-    output             mem_pipeline_block,
+-
+-    //tlb
+-    input       [2 :0] exe_tlb_rf,
+-    output reg  [2 :0] mem_tlb_rf//now tlbsrch has handled
++    output             mem_exc_flush
+ );
+ 
+-
+-localparam  CSR_CRMD                = 14'h0,
+-            CSR_ASID                = 14'h18,
+-            CSR_DMW0                = 14'h180,
+-            CSR_DMW1                = 14'h181;
+ 
+     wire        mem_ready_go;
+     wire [31:0] mem_result;
+@@ -62,25 +52,21 @@
+     reg  [4 :0] mem_rf_waddr;
+     reg  [31:0] alu_result;
+     reg         mem_res_from_mem;
+-    wire        mem_res_from_csr;
+     wire [3 :0] strb;
++    wire [13:0] mem_csr_wr_num;
++    wire        mem_csr_wr;
+     wire        mem_ale;
+     reg  [6 :0] mem_exc_rf_reg;
+     wire        mem_wr,mem_ld_not_handled;
+-    wire        ld_b,ld_h,ld_se,ld_w,mem_we;
+-    //wire to handle flush of the pipe line
+-    wire [2 :0] tlb_task;
+-    wire        mem_csr_wr;
+-    wire [13:0] mem_csr_num;
+-    wire        csr_wr_block;
++
+     // valid signals
+     assign mem_ready_go     = (~mem_res_from_mem & ~mem_we | data_sram_data_ok) & ~mem_gone | (|mem_exc_rf_reg);
+-    assign mem_allowin      = ~mem_valid | mem_ready_go & wb_allowin | cancel_exc_ertn_tlbflush | mem_gone;     
++    assign mem_allowin      = ~mem_valid | mem_ready_go & wb_allowin | cancel_exc_ertn | mem_gone;     
+     assign mem_to_wb_valid  = mem_valid & mem_ready_go;
+     assign mem_rf_wdata     = mem_res_from_mem ? mem_result : alu_result;
+-    assign mem_rf_all       = {mem_res_from_csr,mem_ld_not_handled ,mem_rf_we, mem_rf_waddr, mem_rf_wdata} & {54{mem_valid}};
++    assign mem_rf_all       = {mem_csr_wr,mem_csr_wr_num,mem_ld_not_handled ,mem_rf_we, mem_rf_waddr, mem_rf_wdata} & {54{mem_valid}};
+     always @(posedge clk) begin
+-        if(~resetn | cancel_exc_ertn_tlbflush)
++        if(~resetn | cancel_exc_ertn)
+             mem_valid <= 1'b0;
+         else if(mem_allowin)begin
+             if(exe_ready_go)
+@@ -136,13 +122,6 @@
+         else if(mem_ready_go)
+             mem_gone <= 1'b1;
+     end
+-    //tlb rf
+-    always @(posedge clk ) begin
+-        if(~resetn)
+-            mem_tlb_rf <= 3'b0;
+-        else if(exe_ready_go & mem_allowin)
+-            mem_tlb_rf <= exe_tlb_rf;
+-    end
+ 
+     assign mem_result[7:0] = {8{ld_w | ld_h & ~alu_result[1] | ld_b & alu_result[1:0] == 2'b00}} & data_sram_rdata[7:0]
+                                | {8{ld_b & alu_result[1:0] == 2'b01}} & data_sram_rdata[15:8]
+@@ -157,16 +136,10 @@
+     assign {ld_b, ld_h, ld_w, ld_se} = mem_all[6:3];
+     assign mem_we = mem_all[7];
+     assign mem_ld_not_handled = mem_res_from_mem & ~data_sram_data_ok | ~mem_valid;
++    // assign mem_ale = 2'b0;
+     assign mem_fault_vaddr = alu_result;
+-    assign mem_res_from_csr = mem_csr_rf[79];
++    assign mem_exc_flush = (|mem_exc_rf_reg) & mem_valid;
++    assign mem_csr_wr_num = mem_csr_rf[77:64];
++    assign mem_csr_wr = mem_csr_rf[78];
+     assign mem_exc_rf = mem_exc_rf_reg;
+-    //pipeline block related
+-    assign tlb_task = mem_tlb_rf[2:0];
+-    assign mem_csr_wr = mem_csr_rf[78];
+-    assign mem_csr_num = mem_csr_rf[77:64];
+-    assign csr_wr_block = mem_csr_wr & (mem_csr_num == CSR_CRMD
+-                                      | mem_csr_num == CSR_ASID
+-                                      | mem_csr_num == CSR_DMW0
+-                                      | mem_csr_num == CSR_DMW1);
+-    assign mem_pipeline_block = ((|mem_exc_rf_reg) | (|tlb_task) | (csr_wr_block)) & mem_valid;
+ endmodule

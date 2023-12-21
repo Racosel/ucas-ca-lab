@@ -1,0 +1,104 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\EXEstate.v
++++ E:\calab\ucas-ca-lab\exp_19_tlb_exc\myCPU\EXEstate.v
+@@ -25,7 +25,7 @@
+     output wire        data_sram_wr,
+     output wire [ 1:0] data_sram_size,
+     output wire [ 3:0] data_sram_wstrb,
+-    output wire [31:0] data_sram_addr,
++    // output wire [31:0] data_sram_addr,
+     output wire [31:0] data_sram_wdata,
+     input  wire        data_sram_addr_ok,
+ 
+@@ -42,11 +42,11 @@
+     //csr related
+     input              cancel_exc_ertn_tlbflush,//canceled by exception or ereturn
+     input       [79:0] id_csr_rf,//{csr_rd,csr_wr,csr_num,csr_mask,csr_wvalue}
+-    input       [5 :0] id_exc_rf,
++    input       [8 :0] id_exc_rf,//{int,pif,ppi,adef,sys,brk,ine,pre_if_tlbr,ertn}
+     input       [1 :0] id_timer_rf,
+     input       [63:0] timer,
+     input              mem_pipeline_block,
+-    output      [6 :0] exe_exc_rf,
++    output      [14:0] exe_exc_rf,//{int,pil,pis,pif,pme,if_ppi,exe_ppi,adef,ale,sys,brk,ine,if_tlbr,exe_tlbr,ertn}
+     output      [79:0] exe_csr_rf,//{exe_res_from_csr,csr_wr,csr_um,csr_mask,csr_wvalue}
+ 
+     //tlb related
+@@ -56,7 +56,12 @@
+     output             exe_invtlb,
+     output      [9 :0] exe_invasid,
+     output      [18:0] exe_invvppn,
+-    output      [4 :0] tlb_op
++    output      [4 :0] tlb_op,
++    //tlb translate
++    output      [31:0] exe_vaddr,
++    input       [4 :0] s1_exc,//{s1_pil,s1_pis,s1_pme,s1_ppi,s1_tlbr}
++    output             exe_wr_rd
++
+ );
+     // reg         exe_valid;
+     reg         inst_beq, inst_bne, inst_blt, inst_bltu, inst_bge, inst_bgeu;
+@@ -66,7 +71,7 @@
+     reg  [31:0] exe_alu_src1;
+     reg  [31:0] exe_alu_src2;
+     reg  [5 :0] exe_rf_all;
+-    reg  [5 :0] exe_exc_rf_reg;
++    reg  [8 :0] exe_exc_rf_reg;
+     reg  [1 :0] exe_timer_reg;
+     wire [31:0] exe_alu_result;
+     wire [63:0] mul_temp_result;
+@@ -82,12 +87,12 @@
+     wire        exe_res_from_csr;
+     wire [13:0] exe_csr_wr_num;
+     wire        exe_csr_wr;
+-    wire        exe_csr_rd;
+-    wire [31:0] exe_csr_rd_value;
+     wire [31:0] timer_result;
+     reg  [79:0] exe_csr_rf_reg;
+     wire        mem_ale;
+     reg         mem_handled;
++    wire        exe_pil,exe_pis,exe_pme,exe_ppi,exe_tlbr;
++    wire        int,pif,pre_if_ppi,adef,sys,brk,ine,pre_if_tlbr,ertn;
+     //mem_rf
+     wire        mem_we, ld_b, ld_h, ld_w, ld_se, st_b, st_h, st_w;
+     //tlb rf
+@@ -157,7 +162,7 @@
+ 
+     always @(posedge clk ) begin
+         if(~resetn)
+-            exe_exc_rf_reg <= 6'b0;
++            exe_exc_rf_reg <= 9'b0;
+         else if(id_to_exe_valid & exe_allowin)
+             exe_exc_rf_reg <= id_exc_rf;
+     end
+@@ -225,12 +230,12 @@
+     assign {st_b, st_h, st_w}        = exe_mem_all[2:0];
+     // assign data_sram_en    = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_pipeline_block);//(|mem_exc_rf[6:0]));
+     assign data_sram_wr    = mem_we;
+-    assign data_sram_req   = (exe_res_from_mem | mem_we) & ~(mem_ale | mem_pipeline_block) & ~mem_handled & exe_valid & mem_allowin;//(|mem_exc_rf[6:0]))
++    assign data_sram_req   = (exe_res_from_mem | mem_we) & ~((|exe_exc_rf) | mem_pipeline_block) & ~mem_handled & exe_valid & mem_allowin;//(|mem_exc_rf[6:0]))
+     assign data_sram_size  = {st_w,st_h};
+     assign data_sram_wstrb = {4{st_w}} | {4{st_h}} & {exe_result[1],exe_result[1],~exe_result[1],~exe_result[1]}
+                   | {4{st_b}} & {exe_result[1:0]==2'b11,exe_result[1:0]==2'b10,
+                                  exe_result[1:0]==2'b01,exe_result[1:0]==2'b00};
+-    assign data_sram_addr  = exe_result;
++    assign exe_vaddr  = exe_result;
+     assign data_sram_wdata = {32{st_b}} & {4{exe_rkd_value[7:0]}}
+                              | {32{st_h}} & {2{exe_rkd_value[15:0]}}
+                              | {32{st_w}} & exe_rkd_value;
+@@ -251,7 +256,8 @@
+                           ) & exe_valid;//always generated in one cycle, if not, do as id
+ 
+     //exc reference
+-    assign exe_exc_rf = {exe_exc_rf_reg[5:4],mem_ale,exe_exc_rf_reg[3:0]};
++    assign {int,pif,pre_if_ppi,adef,sys,brk,ine,pre_if_tlbr,ertn} = exe_exc_rf_reg;
++    assign exe_exc_rf = {int,exe_pil,exe_pis,pif,exe_pme,pre_if_ppi,exe_ppi,adef,mem_ale,sys,brk,ine,pre_if_tlbr,exe_tlbr,ertn};
+     assign exe_res_from_csr = exe_csr_rf_reg[79];
+     assign exe_csr_wr_num = exe_csr_rf_reg[77:64];
+     assign exe_csr_wr = exe_csr_rf_reg[78];
+@@ -265,4 +271,6 @@
+     assign exe_invasid   = exe_alu_src1[9:0];
+     assign exe_invvppn   = exe_alu_src2[31:13];
+     assign exe_tlb_rf    = exe_tlb_rf_reg[8:6];
++    assign {exe_pil,exe_pis,exe_pme,exe_ppi,exe_tlbr} = s1_exc;
++    assign exe_wr_rd     = exe_res_from_mem | mem_we;
+ endmodule

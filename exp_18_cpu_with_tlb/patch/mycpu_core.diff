@@ -1,0 +1,199 @@
+--- E:\calab\ucas-ca-lab\exp_18_cpu_with_tlb\myCPU\mycpu_core.v
++++ E:\calab\ucas-ca-lab\exp_16_axi_rand_delay\myCPU\mycpu_core.v
+@@ -76,24 +76,24 @@
+     wire [31:0] exec_pc;
+     wire        ertn_flush;
+     wire        exec_flush;
+-    wire        cancel_exc_ertn_tlbflush;
+-    // wire        cancel_exc_ertn_tlbflush_mem;
++    wire        cancel_exc_ertn;
++    // wire        cancel_exc_ertn_mem;
+     wire        if_exc_rf;//if exc
+ 
+     wire [31:0] csr_rd_value;
+     wire        csr_re;
+     wire [13:0] csr_rd_num;
+     wire [5 :0] id_exc_rf;
+-    wire [79:0] id_csr_rf;//id exc
++    wire [78:0] id_csr_rf;//id exc
+     wire [1 :0] id_timer_rf;
+     wire        has_int;
+ 
+     wire [63:0] current_time;
+     wire [6 :0] exe_exc_rf;
+-    wire [79:0] exe_csr_rf;//exe exc
++    wire [78:0] exe_csr_rf;//exe exc
+ 
+     wire [6 :0] mem_exc_rf;
+-    wire [79:0] mem_csr_rf;//mem exc
++    wire [78:0] mem_csr_rf;//mem exc
+     wire [31:0] mem_fault_vaddr;
+ 
+     wire [31:0] csr_wr_mask;
+@@ -101,28 +101,11 @@
+     wire [13:0] csr_wr_num;
+     wire        csr_we;//wb exc
+     wire [31:0] wb_fault_vaddr;
+-    wire        mem_pipeline_block;
++    wire        mem_exc_flush;
+     wire [5 :0] wb_exc;
+-
+-    //tlb related
+-    wire        tlb_flush;
+-    wire [31:0] tlb_flush_addr;
+-
+-    wire [9 :0] id_tlb_rf;
+-
+-    wire [2 :0] exe_tlb_rf;
+-    wire        exe_tlbsrch,exe_invtlb;
+-    wire [9 :0] exe_invasid;
+-    wire [18:0] exe_invvppn;
+-    wire [4 :0] tlb_op;
+-
+-    wire [2 :0] mem_tlb_rf;
+-    wire        wb_tlbwr,wb_tlbfill,wb_tlbrd;
+-    wire [4 :0] tlb_inst;
+     assign exec_flush      = |wb_exc;
+-    assign cancel_exc_ertn_tlbflush = ertn_flush | exec_flush | tlb_flush;
+-    assign tlb_inst = {exe_tlbsrch,wb_tlbwr,wb_tlbfill,wb_tlbrd,exe_invtlb};
+-    // assign cancel_exc_ertn_tlbflush_mem = cancel_exc_ertn_tlbflush | (|mem_exc_rf);
++    assign cancel_exc_ertn = ertn_flush | exec_flush;
++    // assign cancel_exc_ertn_mem = cancel_exc_ertn | (|mem_exc_rf);
+     IFstate ifstate(
+         .clk(clk),
+         .resetn(resetn),
+@@ -151,11 +134,7 @@
+         .exec_pc(exec_pc),
+         .ertn_flush(ertn_flush),
+         .exec_flush(exec_flush),
+-        .if_exc_rf(if_exc_rf),
+-
+-        //tlb rf
+-        .tlb_flush(tlb_flush),
+-        .tlb_flush_addr(tlb_flush_addr)
++        .if_exc_rf(if_exc_rf)
+     );
+ 
+     IDstate idstate(
+@@ -190,15 +169,15 @@
+         .mem_valid(mem_valid),
+         .wb_valid(wb_valid),
+ 
+-        .cancel_exc_ertn_tlbflush(cancel_exc_ertn_tlbflush),
++        .cancel_exc_ertn(cancel_exc_ertn),
++        .csr_rd_value(csr_rd_value),
+         .if_exc_rf(if_exc_rf),
+         .has_int(has_int),
++        .csr_re(csr_re),
++        .csr_rd_num(csr_rd_num),
+         .id_csr_rf(id_csr_rf),
+         .id_exc_rf(id_exc_rf),
+-        .id_timer_rf(id_timer_rf),
+-
+-        //tlb rf
+-        .id_tlb_rf(id_tlb_rf)
++        .id_timer_rf(id_timer_rf)
+     );
+ 
+ 
+@@ -238,23 +217,14 @@
+         .data_sram_wdata(data_sram_wdata),
+         .data_sram_addr_ok(data_sram_addr_ok),
+ 
+-        .cancel_exc_ertn_tlbflush(cancel_exc_ertn_tlbflush),
++        .cancel_exc_ertn(cancel_exc_ertn),
+         .id_csr_rf(id_csr_rf),
+         .id_timer_rf(id_timer_rf),
+         .id_exc_rf(id_exc_rf),
+         .timer(current_time),
+-        .mem_pipeline_block(mem_pipeline_block),
++        .mem_exc_flush(mem_exc_flush),
+         .exe_exc_rf(exe_exc_rf),
+-        .exe_csr_rf(exe_csr_rf),
+-
+-        //tlb rf
+-        .id_tlb_rf(id_tlb_rf),
+-        .exe_tlb_rf(exe_tlb_rf),
+-        .exe_tlbsrch(exe_tlbsrch),
+-        .exe_invtlb(exe_invtlb),
+-        .exe_invasid(exe_invasid),
+-        .exe_invvppn(exe_invvppn),
+-        .tlb_op(tlb_op)
++        .exe_csr_rf(exe_csr_rf)
+     );
+ 
+     MEMstate memstate(
+@@ -277,21 +247,22 @@
+         .mem_to_wb_valid(mem_to_wb_valid),
+         .mem_pc(mem_pc),
+ 
++        // .data_sram_en(data_sram_en),
++        // .data_sram_we(data_sram_wstrb),
++        // .data_sram_addr(data_sram_addr),
++        // .data_sram_wdata(data_sram_wdata),
++        // .data_sram_rdata(data_sram_rdata),
+         .data_sram_data_ok(data_sram_data_ok),
+         .data_sram_rdata(data_sram_rdata),
+ 
+ 
+-        .cancel_exc_ertn_tlbflush(cancel_exc_ertn_tlbflush),
++        .cancel_exc_ertn(cancel_exc_ertn),
+         .exe_csr_rf(exe_csr_rf),
+         .exe_exc_rf(exe_exc_rf),
+         .mem_exc_rf(mem_exc_rf),
+         .mem_csr_rf(mem_csr_rf),
+         .mem_fault_vaddr(mem_fault_vaddr),
+-        .mem_pipeline_block(mem_pipeline_block),
+-
+-        //tlb rf
+-        .exe_tlb_rf(exe_tlb_rf),
+-        .mem_tlb_rf(mem_tlb_rf)
++        .mem_exc_flush(mem_exc_flush)
+     ) ;
+ 
+     WBstate wbstate(
+@@ -311,27 +282,17 @@
+ 
+         .wb_rf_all(wb_rf_all),
+ 
+-        .cancel_exc_ertn_tlbflush(cancel_exc_ertn_tlbflush),
++        .cancel_exc_ertn(cancel_exc_ertn),
+         .mem_csr_rf(mem_csr_rf),
+         .mem_exc_rf(mem_exc_rf),
+         .mem_fault_vaddr(mem_fault_vaddr),
+         .csr_wr_mask(csr_wr_mask),
+         .csr_wr_value(csr_wr_value),
+         .csr_wr_num(csr_wr_num),
+-        .csr_rd_value(csr_rd_value),
+         .csr_we(csr_we),
+-        .csr_re(csr_re),
+-        .csr_rd_num(csr_rd_num),
+         .wb_exc(wb_exc),
+         .ertn_flush(ertn_flush),
+-        .wb_fault_vaddr(wb_fault_vaddr),
+-
+-        .mem_tlb_rf(mem_tlb_rf),//{inst_tlbwr,inst_tlbfill,inst_tlbrd}
+-        .wb_tlbwr(wb_tlbwr),
+-        .wb_tlbfill(wb_tlbfill),
+-        .wb_tlbrd(wb_tlbrd),
+-        .tlb_flush(tlb_flush),
+-        .tlb_flush_addr(tlb_flush_addr)
++        .wb_fault_vaddr(wb_fault_vaddr)
+     );
+ 
+     csr csr_reg(
+@@ -350,13 +311,7 @@
+         .csr_rd_value(csr_rd_value),
+         .csr_eentry_pc(exec_pc),
+         .csr_eertn_pc(ertn_pc),
+-        .has_int(has_int),
+-
+-        //tlb rf
+-        .tlb_inst(tlb_inst),//{inst_tlbsrch,inst_tlbwr,inst_tlbfill,inst_tlbrd,inst_invtlb}
+-        .invtlb_op(tlb_op),
+-        .inv_vppn(exe_invvppn),
+-        .inv_asid(exe_invasid)
++        .has_int(has_int)
+     );
+ 
+     cpu_timer localtimer(
