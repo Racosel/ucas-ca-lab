@@ -7,3 +7,22 @@
 assign tempans = $signed(extended_x) * $signed(extended_y) ;
 ```
 with your module.
+
+## How to add cache RAMs
+
+search IP catalog: `Block Memory Generator`
+
+- tagv:
+
+  ![image-20231220234105513](./img/image-20231220234105513.png)
+
+  ![image-20231220234143961](./img/image-20231220234143961.png)
+
+- data:
+
+  ![image-20231220234307048](./img/image-20231220234307048.png)
+
+  ![image-20231220234329044](./img/image-20231220234329044.png)
+
+
+
