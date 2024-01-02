@@ -238,6 +238,7 @@ generate
     for(i = 0; i < `WAY_NUM; i = i + 1) begin
         tagv tagv_inst(
             .clka   (clk            ),
+            .ena    (1),
             .wea    (tagv_we   [i]  ),
             .addra  (tagv_addr [i]  ),
             .dina   (tagv_wdata[i]  ),
@@ -272,6 +273,7 @@ generate
         for(j = 0; j < `BANK_NUM; j = j + 1) begin
             data data_inst(
                 .clka   (clk                ),
+                .ena    (1),
                 .wea    (data_we   [i][j]   ),
                 .addra  (data_addr [i][j]   ),
                 .dina   (data_wdata[i][j]   ),
@@ -404,12 +406,12 @@ assign if_replace = ~dirty[replace_way_num][req_index_r] | ~read_valid[replace_w
  * connect
  */
 
-assign rd_type  = 3'b110;
-assign rd_addr  = {req_tag_r, req_index_r, req_offset_r};
+assign rd_type  = 3'b100;
+assign rd_addr  = {req_tag_r, req_index_r, 0};
 assign rd_req   = (curr_state == REPLACE);
 assign rdata    = ret_valid ? ret_data : load_res;
 
-assign wr_type  = 3'b110;
+assign wr_type  = 3'b100;
 assign wr_addr  = {read_tag[replace_way_num], req_index_r, req_offset_r};
 assign wr_req   = wr_req_r;
 assign wr_wstrb = 4'hf;
