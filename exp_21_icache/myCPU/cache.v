@@ -1,422 +1,545 @@
-/**
- * Module: cache
- * Description: This module implements a cache for a CPU. It handles read and write operations between the cache and the CPU, as well as between the cache and an AXI interface. The cache is organized into multiple ways and banks, and supports cache line operations. It also includes a write buffer and dirty bit tracking.
- */
-
-`define WIDTH      32
-
-`define TAG_WIDTH  20
-`define IDX_WIDTH   8
-`define OFT_WIDTH   4
-`define LIN_WIDTH 128
-
-`define BYTE_NUM    4
-`define WAY_NUM     2
-`define BANK_NUM    4
-
 module cache(
-    input           clk,
-    input           resetn,
-
-    /*
-     *  CACHE <==> CPU
-     */
-    input           valid,
-    input           op,
-    input   [ 7:0]  index,
-    input   [19:0]  tag,
-    input   [ 3:0]  offset,
-    input   [ 3:0]  wstrb,
-    input   [31:0]  wdata,   
-    output          addr_ok, 
-    output          data_ok,
-    output  [31:0]  rdata,
-
-    /*
-     *  CACHE <==> AXI
-     */
-    input           rd_rdy,
-    input           ret_valid,
-    input           ret_last,
-    input   [ 31:0] ret_data,
-    output          rd_req,
-    output  [  2:0] rd_type,
-    output  [ 31:0] rd_addr,
-    
-    input           wr_rdy,
-    output          wr_req,
-    output  [  2:0] wr_type,
-    output  [ 31:0] wr_addr,
-    output  [  3:0] wr_wstrb,
-    output  [127:0] wr_data 
+    //cache_cpu_interface
+    input  wire         clk,
+    input  wire         reset,
+    input  wire         valid,
+    input  wire         op,
+    input  wire [  7:0] index,
+    input  wire [ 19:0] tag,
+    input  wire [  3:0] offset,
+    input  wire [  3:0] wstrb,
+    input  wire [ 31:0] wdata,
+    output wire         addr_ok,
+    output wire         data_ok,
+    output wire [ 31:0] rdata,
+    //cache_bridge_interface
+    output wire         rd_req,
+    output wire [  2:0] rd_type,
+    output wire [ 31:0] rd_addr,
+    input  wire         rd_rdy,
+    input  wire         ret_valid,
+    input  wire         ret_last,
+    input  wire [ 31:0] ret_data,
+    output wire         wr_req,
+    output wire [  2:0] wr_type,
+    output wire [ 31:0] wr_addr,
+    output wire [  3:0] wr_wstrb,
+    output wire [127:0] wr_data,
+    input  wire         wr_rdy
 );
+    reg  [  5:0] main_state;
+    reg  [  5:0] main_state_next;
+    reg  [  5:0] write_state;
+    reg  [  5:0] write_state_next;
+    wire         req_stall; 
+    wire [  3:0] refill_data_ok;
+    reg          lookup_op;
+    reg  [  7:0] lookup_index;
+    reg  [ 19:0] lookup_tag;
+    reg  [  3:0] lookup_offset;
+    reg  [  3:0] lookup_wstrb;
+    reg  [ 31:0] lookup_wdata;
+    reg          wr_req_cond;
+    wire [ 19:0] way0_tag;
+    wire [ 19:0] way1_tag;
+    wire         way0_v;
+    wire         way1_v;
+    wire         way0_hit;
+    wire         way1_hit;
+    wire         lookup_hit;
+    wire [ 31:0] way0_load_word;
+    wire [ 31:0] way1_load_word;
+    wire [ 31:0] final_ret_data;
+    reg          write_buf_way;
+    reg  [  1:0] write_buf_bank;
+    reg  [  7:0] write_buf_index;
+    reg  [  3:0] write_buf_wstrb;
+    reg  [ 31:0] write_buf_wdata;
+    reg          miss_buf_way;
+    reg  [  1:0] miss_buf_num;
+    reg  [255:0] d_reg_0;
+    reg  [255:0] d_reg_1;
+    wire         tagv_ram_0_en;
+    wire         tagv_ram_0_we;
+    wire [  7:0] tagv_ram_0_index;
+    wire [ 20:0] tagv_ram_0_wdata;
+    wire [ 20:0] tagv_ram_0_rdata;
+    wire         tagv_ram_1_en;
+    wire         tagv_ram_1_we;
+    wire [  7:0] tagv_ram_1_index;
+    wire [ 20:0] tagv_ram_1_wdata;
+    wire [ 20:0] tagv_ram_1_rdata;
+    wire         data_bank_0_en;
+    wire         data_bank_1_en;
+    wire         data_bank_2_en;
+    wire         data_bank_3_en;
+    wire         data_bank_4_en;
+    wire         data_bank_5_en;
+    wire         data_bank_6_en;
+    wire         data_bank_7_en;
+    wire [  3:0] data_bank_0_we;
+    wire [  3:0] data_bank_1_we;
+    wire [  3:0] data_bank_2_we;
+    wire [  3:0] data_bank_3_we;
+    wire [  3:0] data_bank_4_we;
+    wire [  3:0] data_bank_5_we;
+    wire [  3:0] data_bank_6_we;
+    wire [  3:0] data_bank_7_we;
+    wire [  7:0] data_bank_0_index;
+    wire [  7:0] data_bank_1_index;
+    wire [  7:0] data_bank_2_index;
+    wire [  7:0] data_bank_3_index;
+    wire [  7:0] data_bank_4_index;
+    wire [  7:0] data_bank_5_index;
+    wire [  7:0] data_bank_6_index;
+    wire [  7:0] data_bank_7_index;
+    wire [ 31:0] data_bank_0_rdata;
+    wire [ 31:0] data_bank_1_rdata;
+    wire [ 31:0] data_bank_2_rdata;
+    wire [ 31:0] data_bank_3_rdata;
+    wire [ 31:0] data_bank_4_rdata;
+    wire [ 31:0] data_bank_5_rdata;
+    wire [ 31:0] data_bank_6_rdata;
+    wire [ 31:0] data_bank_7_rdata;
+    wire [ 31:0] data_bank_0_wdata;
+    wire [ 31:0] data_bank_1_wdata;
+    wire [ 31:0] data_bank_2_wdata;
+    wire [ 31:0] data_bank_3_wdata;
+    wire [ 31:0] data_bank_4_wdata;
+    wire [ 31:0] data_bank_5_wdata;
+    wire [ 31:0] data_bank_6_wdata;
+    wire [ 31:0] data_bank_7_wdata;
+    reg          q0;
+    reg          q1;
+    reg          q2;
+    wire         lfsr;
+    
+    localparam IDLE    = 6'b000001,
+               LOOKUP  = 6'b000010,
+               MISS    = 6'b000100,
+               REPLACE = 6'b001000,
+               REFILL  = 6'b010000,
+               WRITE   = 6'b100000;
 
-/*
- * Main FSM
- */
-parameter   IDLE 	= 5'b00001,
-            LOOKUP 	= 5'b00010,
-            MISS    = 5'b00100,
-            REPLACE = 5'b01000,
-            REFILL 	= 5'b10000;
-reg [4:0]   curr_state;
-reg [4:0]   next_state;
+    localparam OP_READ  = 1'b0,
+               OP_WRITE = 1'b1;
 
-/*
- * FSM for write buffer
- */
-parameter   W_IDLE  = 2'b01;
-parameter   W_WRITE = 2'b10;
-reg [1:0]   Wcurr_state;
-reg [1:0]   Wnext_state;
+    always@(posedge clk) 
+    begin
+        if (reset)
+        begin
+            main_state  <= IDLE;
+            write_state <= IDLE;
+        end
+        else
+        begin
+            main_state  <= main_state_next;
+            write_state <= write_state_next;
+        end
+    end  
 
-
-wire                    tagv_we     [`WAY_NUM - 1:0];
-wire [`IDX_WIDTH - 1:0] tagv_addr   [`WAY_NUM - 1:0];
-wire [`TAG_WIDTH    :0] tagv_rdata  [`WAY_NUM - 1:0];   // DONT '-1'!
-wire [`TAG_WIDTH    :0] tagv_wdata  [`WAY_NUM - 1:0];   // TAG + VALID needs {`TAG_WIDTH+1} bits
-
-wire                    data_we     [`WAY_NUM - 1:0][`BANK_NUM - 1:0];
-wire [`IDX_WIDTH - 1:0] data_addr   [`WAY_NUM - 1:0][`BANK_NUM - 1:0];
-wire [    `WIDTH - 1:0] data_rdata  [`WAY_NUM - 1:0][`BANK_NUM - 1:0];
-wire [    `WIDTH - 1:0] data_wdata  [`WAY_NUM - 1:0][`BANK_NUM - 1:0];
-wire [    `WIDTH - 1:0] data_wdata_final;
-
-reg  [`LIN_WIDTH - 1:0] dirty       [`WAY_NUM-1:0];
-wire [`IDX_WIDTH - 1:0] dirty_index;
-
-wire                  read_valid  [`WAY_NUM - 1:0];
-wire [`TAG_WIDTH-1:0] read_tag    [`WAY_NUM - 1:0];
-wire [`LIN_WIDTH-1:0] read_rdata  [`WAY_NUM - 1:0];
-
-
-reg                     req_op_r;
-reg  [`IDX_WIDTH - 1:0] req_index_r;
-reg  [`TAG_WIDTH - 1:0] req_tag_r;
-reg  [`OFT_WIDTH - 1:0] req_offset_r;
-reg  [    `WIDTH - 1:0] req_wdata_r;
-reg  [ `BYTE_NUM - 1:0] req_wstrb_r;
-
-reg                     wr_way_r;
-reg  [             1:0] wr_bank_r;
-reg  [`IDX_WIDTH - 1:0] wr_index_r;
-reg  [`TAG_WIDTH - 1:0] wr_tag_r;
-reg  [`OFT_WIDTH - 1:0] wr_offset_r;
-reg  [    `WIDTH    :0] wr_wdata_r;
-reg  [ `BYTE_NUM    :0] wr_wstrb_r;
-wire                    wr_writing;
-
-// Tag cmp
-wire [             1:0] bank;
-wire [             1:0] req_bank_r;
-wire                    cache_hit;
-wire                    hit_way;
-wire [    `WAY_NUM - 1:0] hit;
-wire [    `WAY_NUM - 1:0] wr_hit;
-wire                    hit_write;
-wire                    hit_write_hazard;
-wire                    index_offset_remain;
-
-// LOAD data
-wire [      `WIDTH-1:0] load_word   [`WAY_NUM-1:0];
-wire [      `WIDTH-1:0] load_res;
-
-// miss(replace)
-wire                    replace_way_num; 
-reg  [             1:0] ret_cnt;
-wire                    if_replace;
-
-// for interface
-reg                     wr_req_r;
-wire                    rst;
-
-// random gen
-reg  [             7:0] random;
-
-// genvar
-genvar i, j;
-
-// rst
-assign rst = ~resetn;
-
-/*
- * Random
- */
-
-always @ (posedge clk) begin
-    if(rst)
-        random <= 8'b0;
-    else
-        random <= {random[6:0], random[1] ^ random[2] ^ random[3] ^ random[7]};
-end
-
-/*
- * FSM state switch
- */
-always @ (posedge clk) begin
-    if (rst) begin
-        curr_state <= IDLE;
-        Wcurr_state <= W_IDLE;
-    end else begin
-        curr_state <= next_state;
-        Wcurr_state <= Wnext_state;
+    always@(*)
+    begin
+        case (main_state)
+            IDLE:
+                if (valid & addr_ok)
+                    main_state_next = LOOKUP;
+                else
+                    main_state_next = IDLE;
+            LOOKUP:
+                if (valid & addr_ok)
+                    main_state_next = LOOKUP;
+                else if (~lookup_hit)
+                    main_state_next = MISS;
+                else
+                    main_state_next = IDLE;
+            MISS:
+                if (wr_rdy)
+                    main_state_next = REPLACE;
+                else
+                    main_state_next = MISS;
+            REPLACE:
+                if (rd_rdy)
+                    main_state_next = REFILL;
+                else
+                    main_state_next = REPLACE;
+            REFILL:
+                if (ret_valid && ret_last)
+                    main_state_next = IDLE;
+                else
+                    main_state_next = REFILL;
+            default:
+                    main_state_next = IDLE;
+        endcase
     end
-end
 
-/*
- * Main FSM logic
- */
-
-always @ (*) begin
-    case(curr_state)
-        IDLE:
-            if(valid & ~hit_write_hazard)
-                next_state = LOOKUP;      
-            else
-                next_state = IDLE;
-        LOOKUP:
-            if((~valid | hit_write_hazard) & cache_hit)
-                next_state = IDLE;
-            else if (valid & cache_hit)
-                next_state = LOOKUP;
-            else if (if_replace)
-                next_state = REPLACE;
-            else
-                next_state = MISS;
-        MISS:
-            if(wr_rdy)
-                next_state = REPLACE;
-            else
-                next_state = MISS;
-        REPLACE:
-            if(rd_rdy)
-                next_state = REFILL;
-            else
-                next_state = REPLACE;
-        REFILL:
-            if(ret_valid & ret_last)
-                next_state = IDLE;
-            else
-                next_state = REFILL;
-        default:
-            next_state = IDLE;
-    endcase
-end
-
-/*
- * FSM for write buffer logic
- */
-
-always @ (*) begin
-    case(Wcurr_state)
-        W_IDLE:
-            if(curr_state == LOOKUP & hit_write)
-                Wnext_state = W_WRITE;
-            else
-                Wnext_state = W_IDLE;
-        W_WRITE:
-            if(hit_write)
-                Wnext_state = W_WRITE;
-            else
-                Wnext_state = W_IDLE;
-        default:
-            Wnext_state = W_IDLE;
-    endcase
-end
-
-/*
- * tagv_inst
- */
-
-assign tagv_we   [0] = ret_valid & ret_last & ~replace_way_num;
-assign tagv_we   [1] = ret_valid & ret_last &  replace_way_num;
-assign tagv_wdata[0] = {req_tag_r, 1'b1};
-assign tagv_wdata[1] = {req_tag_r, 1'b1};
-assign tagv_addr [0] = (curr_state == IDLE || curr_state == LOOKUP) ? index : req_index_r;
-assign tagv_addr [1] = (curr_state == IDLE || curr_state == LOOKUP) ? index : req_index_r;
-generate 
-    for(i = 0; i < `WAY_NUM; i = i + 1) begin
-        tagv tagv_inst(
-            .clka   (clk            ),
-            .wea    (tagv_we   [i]  ),
-            .addra  (tagv_addr [i]  ),
-            .dina   (tagv_wdata[i]  ),
-            .douta  (tagv_rdata[i]  )
-        );
-        assign read_valid[i] = tagv_rdata[i][0];
-        assign read_tag[i]   = tagv_rdata[i][`TAG_WIDTH:1];
+    always@(*)
+    begin
+        case(write_state)
+            IDLE:
+                if (lookup_op == OP_WRITE && lookup_hit)
+                    write_state_next = WRITE;
+                else
+                    write_state_next = IDLE;
+            WRITE:
+                if (lookup_op == OP_WRITE && lookup_hit)
+                    write_state_next = WRITE;
+                else
+                    write_state_next = IDLE;
+            default:
+                    write_state_next = IDLE;
+        endcase
     end
-endgenerate
 
-/*
- * data_inst
- */
+    assign req_stall = write_state == WRITE && op == OP_READ && offset[3:2] == write_buf_bank
+                    || main_state == LOOKUP && op == OP_READ && lookup_op == OP_WRITE && tag == lookup_tag && index == lookup_index && offset[3:2] == lookup_offset[3:2]
+                    || main_state != IDLE && main_state != LOOKUP;
 
-generate
-    for(i = 0; i < `BANK_NUM; i = i + 1) begin
-        assign data_we[0][i] = {4{(wr_writing) & (wr_bank_r == i) & ~wr_way_r}} & wr_wstrb_r |
-                               {4{ret_valid & ret_cnt == i & ~replace_way_num}} & 4'hf;
-        assign data_we[1][i] = {4{(wr_writing) & (wr_bank_r == i) & wr_way_r}}  & wr_wstrb_r |
-                               {4{ret_valid & ret_cnt == i & replace_way_num}}  & 4'hf;
+    assign addr_ok = ~(req_stall || main_state == LOOKUP && !lookup_hit);
+    assign data_ok = (lookup_op == OP_READ && lookup_hit || lookup_op == OP_WRITE) && main_state == LOOKUP || (|refill_data_ok && lookup_op == OP_READ);
+    assign refill_data_ok[0] = lookup_offset[3:2] == 2'b00 && miss_buf_num == 2'b00 && ret_valid;
+    assign refill_data_ok[1] = lookup_offset[3:2] == 2'b01 && miss_buf_num == 2'b01 && ret_valid;
+    assign refill_data_ok[2] = lookup_offset[3:2] == 2'b10 && miss_buf_num == 2'b10 && ret_valid;
+    assign refill_data_ok[3] = lookup_offset[3:2] == 2'b11 && miss_buf_num == 2'b11 && ret_valid;
+    
+    always@(posedge clk)
+    begin
+        if (reset)
+            wr_req_cond <= 0;
+        else if (main_state == MISS && wr_rdy)
+            wr_req_cond <= 1;
+        else
+            wr_req_cond <= 0;
     end
-endgenerate
+    assign wr_req  = wr_req_cond && (miss_buf_way ? d_reg_1[lookup_index] : d_reg_0[lookup_index]) && (miss_buf_way ? tagv_ram_1_rdata[0] : tagv_ram_0_rdata[0]);
+    assign wr_type = 3'b100;
+    assign wr_addr = miss_buf_way ? {tagv_ram_1_rdata[20:1], lookup_index, 4'd0} : {tagv_ram_0_rdata[20:1], lookup_index, 4'd0};
+    assign wr_wstrb = 4'b1111;
+    assign wr_data = miss_buf_way ? {data_bank_7_rdata, data_bank_6_rdata, data_bank_5_rdata, data_bank_4_rdata} :
+                                    {data_bank_3_rdata, data_bank_2_rdata, data_bank_1_rdata, data_bank_0_rdata};
+    assign rd_req  = main_state == REPLACE;
+    assign rd_type = 3'b100;
+    assign rd_addr = {lookup_tag, lookup_index, 4'd0};
 
-generate
-    for(i = 0; i < `WAY_NUM; i = i + 1) begin
-        assign read_rdata[i] = {data_rdata[i][3], data_rdata[i][2],  data_rdata[i][1], data_rdata[i][0]};
-    end
-endgenerate
-
-generate
-    for(i = 0; i < `WAY_NUM; i = i + 1) begin
-        for(j = 0; j < `BANK_NUM; j = j + 1) begin
-            data data_inst(
-                .clka   (clk                ),
-                .wea    (data_we   [i][j]   ),
-                .addra  (data_addr [i][j]   ),
-                .dina   (data_wdata[i][j]   ),
-                .douta  (data_rdata[i][j]   )
-            );
-            assign data_wdata[i][j] = (wr_writing) ? wr_wdata_r :
-                                      ((req_bank_r != j) | ~req_op_r) ? ret_data : data_wdata_final;
-            assign data_addr[i][j]  = (curr_state == IDLE) | (curr_state == LOOKUP) ? index : req_index_r;
+    always@(posedge clk)
+    begin
+        if (valid & addr_ok)
+        begin
+            lookup_op     <= op;
+            lookup_index  <= index; 
+            lookup_tag    <= tag;
+            lookup_offset <= offset;
+            lookup_wstrb  <= wstrb;
+            lookup_wdata  <= wdata;
         end
     end
-endgenerate
+    assign way0_tag = tagv_ram_0_rdata[20:1];
+    assign way1_tag = tagv_ram_1_rdata[20:1];
+    assign way0_v   = tagv_ram_0_rdata[0];
+    assign way1_v   = tagv_ram_1_rdata[0];
+    assign way0_hit = lookup_tag == way0_tag && way0_v && main_state == LOOKUP;
+    assign way1_hit = lookup_tag == way1_tag && way1_v && main_state == LOOKUP;
+    assign lookup_hit = way0_hit || way1_hit;
+    assign way0_load_word = {32{lookup_offset[3:2] == 2'd0}} & data_bank_0_rdata | {32{lookup_offset[3:2] == 2'd1}} & data_bank_1_rdata | {32{lookup_offset[3:2] == 2'd2}} & data_bank_2_rdata | {32{lookup_offset[3:2] == 2'd3}} & data_bank_3_rdata;
+    assign way1_load_word = {32{lookup_offset[3:2] == 2'd0}} & data_bank_4_rdata | {32{lookup_offset[3:2] == 2'd1}} & data_bank_5_rdata | {32{lookup_offset[3:2] == 2'd2}} & data_bank_6_rdata | {32{lookup_offset[3:2] == 2'd3}} & data_bank_7_rdata;
+    assign rdata          = {32{way0_hit}} & way0_load_word | {32{way1_hit}} & way1_load_word | {32{|refill_data_ok}} & ret_data;
+    assign final_ret_data = {32{lookup_op == OP_READ || lookup_op == OP_WRITE && lookup_offset[3:2] != miss_buf_num}} & ret_data 
+                          | {32{lookup_op == OP_WRITE && lookup_offset[3:2] == miss_buf_num}} & (ret_data & ~{{8{lookup_wstrb[3]}}, {8{lookup_wstrb[2]}}, {8{lookup_wstrb[1]}}, {8{lookup_wstrb[0]}}} | lookup_wdata & {{8{lookup_wstrb[3]}}, {8{lookup_wstrb[2]}}, {8{lookup_wstrb[1]}}, {8{lookup_wstrb[0]}}});
 
-assign data_wdata_final =  {wr_wstrb_r[3] ? wr_wdata_r[31:24] : ret_data[31:24],
-                            wr_wstrb_r[2] ? wr_wdata_r[23:16] : ret_data[23:16],
-                            wr_wstrb_r[1] ? wr_wdata_r[15: 8] : ret_data[15: 8],
-                            wr_wstrb_r[0] ? wr_wdata_r[ 7: 0] : ret_data[ 7: 0]};
-
-assign load_res= data_rdata[hit_way][req_bank_r];
-
-/*
- * dirty_inst (use regfile)
- */
-
-always @ (posedge clk) begin
-    if(rst) begin
-        dirty[0] <= 256'b0;
-        dirty[1] <= 256'b0;
-    end else if (wr_writing) begin
-        dirty[wr_way_r][wr_index_r] <= 1'b1;
-    end else if (ret_valid & ret_last) begin 
-        dirty[replace_way_num][req_index_r] <= req_op_r;
+    always@(posedge clk)
+    begin
+        if (lookup_hit && lookup_op == OP_WRITE)
+        begin
+            write_buf_way   <= way1_hit;
+            write_buf_bank  <= lookup_offset[3:2];
+            write_buf_index <= lookup_index;
+            write_buf_wstrb <= lookup_wstrb;
+            write_buf_wdata <= lookup_wdata;
+        end
     end
-end
 
-/*
- * tag compare
- */
-
-assign hit[0]               = read_valid[0] && (read_tag[0] == req_tag_r);
-assign hit[1]               = read_valid[1] && (read_tag[1] == req_tag_r);
-assign cache_hit            = hit[0] || hit[1];
-assign hit_way              = hit[0] ? 0 : 1;
-assign hit_write            = (curr_state == LOOKUP) && cache_hit && req_op_r;
-assign hit_write_hazard     = valid & ~op & (
-                                ((curr_state == LOOKUP) & hit_write & index_offset_remain)
-                                |(wr_writing & (bank == req_bank_r))
-                            );
-assign index_offset_remain  = {index, offset} == {req_index_r, req_offset_r};
-
-/*
- * request buffer
- */
-
-always @ (posedge clk)
-begin
-    if(rst) begin
-        req_index_r  <= 0;
-        req_offset_r <= 0;
-        req_op_r     <= 0;
-        req_tag_r    <= 0;
-        req_wdata_r  <= 0;
-        req_wstrb_r  <= 0;
+    always@(posedge clk)
+    begin
+        if (main_state == MISS && wr_rdy)
+            miss_buf_way <= lfsr;
     end
-    else if(next_state == LOOKUP) begin
-        req_index_r   <= index;
-        req_offset_r  <= offset;
-        req_op_r      <= op;
-        req_tag_r     <= tag;
-        req_wdata_r   <= wdata;
-        req_wstrb_r   <= wstrb;
+
+    always@(posedge clk)
+    begin
+        if (main_state == REPLACE && rd_rdy)
+            miss_buf_num <= 2'd0;
+        else if (ret_valid)
+            miss_buf_num <= miss_buf_num + 2'd1;
     end
-end
-assign bank       = offset[3:2];
-assign req_bank_r = req_offset_r[3:2];
 
-/*
- * write buffer
- */
+    always@(posedge clk)
+    begin
+        if (reset)
+            d_reg_0 <= 256'd0;
+        else if (write_state == WRITE && !write_buf_way)
+            d_reg_0[write_buf_index] <= 1'b1;
+        else if (main_state == REFILL && ret_valid && ret_last && lookup_op == OP_WRITE && !miss_buf_way)
+            d_reg_0[lookup_index] <= 1'b1; 
 
-always @ (posedge clk)
-begin
-    if(rst) begin
-        wr_way_r    <= 0;
-        wr_bank_r   <= 0;
-        wr_index_r  <= 0;
-        wr_tag_r    <= 0;
-        wr_wdata_r  <= 0;
-        wr_wstrb_r  <= 0;
-        wr_offset_r <= 0;
+        if (reset)
+            d_reg_1 <= 256'd0;
+        else if (write_state == WRITE && write_buf_way)
+            d_reg_1[write_buf_index] <= 1'b1;
+        else if (main_state == REFILL && ret_valid && ret_last && lookup_op == OP_WRITE && miss_buf_way)
+            d_reg_1[lookup_index] <= 1'b1; 
+        else if (main_state == REFILL && ret_valid && ret_last && lookup_op == OP_READ && miss_buf_way)
+            d_reg_1[lookup_index] <= 1'b0; 
     end
-    else if(hit_write) begin
-        wr_tag_r    <= req_tag_r;
-        wr_way_r    <= hit_way;
-        wr_bank_r   <= req_bank_r;
-        wr_index_r  <= req_index_r;
-        wr_wstrb_r  <= req_wstrb_r;
-        wr_wdata_r  <= req_wdata_r;
-        wr_offset_r <= req_offset_r;
+
+    always@(posedge clk)
+    begin
+        if (reset)
+        begin
+            q0 <= 1;
+            q1 <= 1;
+            q2 <= 1;
+        end
+        else
+        begin
+            q0 <= q1;
+            q1 <= q0 ^ q2;
+            q2 <= q0;
+        end
     end
-end
+    assign lfsr = q0;
 
-always @ (posedge clk) begin
-    if (rst)
-        wr_req_r <= 1'b0;
-    else if(curr_state == MISS && next_state == REPLACE)
-        wr_req_r <= 1'b1;
-    else if(wr_rdy)
-        wr_req_r <= 1'b0;
-end
+    tagv_ram 
+        tagv_ram_0
+        (
+            .clka  (clk              ),   
+            .ena   (tagv_ram_0_en    ),
+            .wea   (tagv_ram_0_we    ),
+            .addra (tagv_ram_0_index ),   //7:0
+            .dina  (tagv_ram_0_wdata ),   //20:0
+            .douta (tagv_ram_0_rdata )    //20:0
+        ),
+        tagv_ram_1
+        (
+            .clka  (clk              ),   
+            .ena   (tagv_ram_1_en    ),
+            .wea   (tagv_ram_1_we    ),
+            .addra (tagv_ram_1_index ),   //7:0
+            .dina  (tagv_ram_1_wdata ),   //20:0
+            .douta (tagv_ram_1_rdata )    //20:0
+        );
+        assign tagv_ram_0_en    = (main_state == IDLE || main_state == LOOKUP) && ~req_stall
+                                || main_state == MISS && wr_rdy
+                                || main_state == REFILL && ret_valid && ret_last && !miss_buf_way;
 
-assign wr_writing = (Wcurr_state == W_WRITE);
+        assign tagv_ram_0_we    = main_state == REFILL && ret_valid && ret_last && !miss_buf_way;
 
+        assign tagv_ram_0_index = {8{(main_state == IDLE || main_state == LOOKUP)}} & index 
+                                | {8{(main_state == MISS || main_state == REFILL)}} &lookup_index;
 
-/*
- * replace
- */
+        assign tagv_ram_0_wdata = {lookup_tag, 1'b1};
 
-always @ (posedge clk) begin
-    if(rst)
-        ret_cnt <= 0;
-    else if (ret_valid & ~ret_last)
-        ret_cnt <= ret_cnt + 1;
-    else if (ret_valid & ret_last)
-        ret_cnt <= 0;
-end
-assign replace_way_num  = random[0];
-assign if_replace = ~dirty[replace_way_num][req_index_r] | ~read_valid[replace_way_num];
+        assign tagv_ram_1_en    = (main_state == IDLE || main_state == LOOKUP) && ~req_stall
+                                || main_state == MISS && wr_rdy
+                                || main_state == REFILL && ret_valid && ret_last && miss_buf_way;
 
-/*
- * connect
- */
+        assign tagv_ram_1_we    = main_state == REFILL && ret_valid && ret_last && miss_buf_way;
 
-assign rd_type  = 3'b100;
-assign rd_addr  = {req_tag_r, req_index_r, req_offset_r};
-assign rd_req   = (curr_state == REPLACE);
-assign rdata    = ret_valid ? ret_data : load_res;
+        assign tagv_ram_1_index = {8{(main_state == IDLE || main_state == LOOKUP)}} & index 
+                                | {8{(main_state == MISS || main_state == REFILL)}} & lookup_index;
 
-assign wr_type  = 3'b100;
-assign wr_addr  = {read_tag[replace_way_num], req_index_r, req_offset_r};
-assign wr_req   = wr_req_r;
-assign wr_wstrb = 4'hf;
-assign wr_data  = {data_rdata[replace_way_num][3], data_rdata[replace_way_num][2],
-                   data_rdata[replace_way_num][1], data_rdata[replace_way_num][0]};
+        assign tagv_ram_1_wdata = {lookup_tag, 1'b1};
 
-assign addr_ok   = (curr_state == IDLE) | (curr_state == LOOKUP & valid & cache_hit & (op | (~op & ~hit_write_hazard)));
-assign data_ok   = (curr_state == LOOKUP & (cache_hit | req_op_r)) | (curr_state == REFILL & ~req_op_r & ret_valid & (ret_cnt == req_bank_r));
+    data_bank_ram
+        data_bank_ram_0
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_0_en    ),
+            .wea   (data_bank_0_we    ),   //3:0
+            .addra (data_bank_0_index ),   //7:0
+            .dina  (data_bank_0_wdata ),   //31:0
+            .douta (data_bank_0_rdata )    //31:0
+        ),
+        data_bank_ram_1
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_1_en    ),
+            .wea   (data_bank_1_we    ),   //3:0
+            .addra (data_bank_1_index ),   //7:0
+            .dina  (data_bank_1_wdata ),   //31:0
+            .douta (data_bank_1_rdata )    //31:0
+        ),
+        data_bank_ram_2
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_2_en    ),
+            .wea   (data_bank_2_we    ),   //3:0
+            .addra (data_bank_2_index ),   //7:0
+            .dina  (data_bank_2_wdata ),   //31:0
+            .douta (data_bank_2_rdata )    //31:0
+        ),
+        data_bank_ram_3
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_3_en    ),
+            .wea   (data_bank_3_we    ),   //3:0
+            .addra (data_bank_3_index ),   //7:0
+            .dina  (data_bank_3_wdata ),   //31:0
+            .douta (data_bank_3_rdata )    //31:0
+        ),
+        data_bank_ram_4
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_4_en    ),
+            .wea   (data_bank_4_we    ),   //3:0
+            .addra (data_bank_4_index ),   //7:0
+            .dina  (data_bank_4_wdata ),   //31:0
+            .douta (data_bank_4_rdata )    //31:0
+        ),
+        data_bank_ram_5
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_5_en    ),
+            .wea   (data_bank_5_we    ),   //3:0
+            .addra (data_bank_5_index ),   //7:0
+            .dina  (data_bank_5_wdata ),   //31:0
+            .douta (data_bank_5_rdata )    //31:0
+        ),
+        data_bank_ram_6
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_6_en    ),
+            .wea   (data_bank_6_we    ),   //3:0
+            .addra (data_bank_6_index ),   //7:0
+            .dina  (data_bank_6_wdata ),   //31:0
+            .douta (data_bank_6_rdata )    //31:0
+        ),
+        data_bank_ram_7
+        (
+            .clka  (clk              ),   
+            .ena   (data_bank_7_en    ),
+            .wea   (data_bank_7_we    ),   //3:0
+            .addra (data_bank_7_index ),   //7:0
+            .dina  (data_bank_7_wdata ),   //31:0
+            .douta (data_bank_7_rdata )    //31:0
+        );
+    assign data_bank_0_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] ==2'b00
+                             || write_state == WRITE && !write_buf_way && write_buf_bank == 2'b00 
+                             || main_state == MISS && wr_rdy && !lfsr
+                             || main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b00; 
+
+    assign data_bank_0_we    = {4{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b00}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b00}} & 4'b1111;
+
+    assign data_bank_0_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b00}} & index
+                             | {8{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b00}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_0_wdata = {32{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b00}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b00}} & final_ret_data;
+
+    assign data_bank_1_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b01
+                             || write_state == WRITE && !write_buf_way && write_buf_bank == 2'b01 
+                             || main_state == MISS && wr_rdy && !lfsr
+                             || main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b01; 
+
+    assign data_bank_1_we    = {4{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b01}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b01}} & 4'b1111;
+
+    assign data_bank_1_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b01}} & index
+                             | {8{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b01}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_1_wdata = {32{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b01}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b01}} & final_ret_data;
+    
+    assign data_bank_2_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b10
+                             || write_state == WRITE && !write_buf_way && write_buf_bank == 2'b10 
+                             || main_state == MISS && wr_rdy && !lfsr
+                             || main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b10; 
+
+    assign data_bank_2_we    = {4{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b10}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b10}} & 4'b1111;
+
+    assign data_bank_2_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b10}} & index
+                             | {8{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b10}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_2_wdata = {32{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b10}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b10}} & final_ret_data;
+
+    assign data_bank_3_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b11
+                             || write_state == WRITE && !write_buf_way && write_buf_bank == 2'b11 
+                             || main_state == MISS && wr_rdy && !lfsr
+                             || main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b11; 
+
+    assign data_bank_3_we    = {4{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b11}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b11}} & 4'b1111;
+
+    assign data_bank_3_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b11}} & index
+                             | {8{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b11}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_3_wdata = {32{write_state == WRITE && !write_buf_way && write_buf_bank == 2'b11}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && !miss_buf_way && miss_buf_num == 2'b11}} & final_ret_data;
+
+    assign data_bank_4_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b00
+                             || write_state == WRITE && write_buf_way && write_buf_bank == 2'b00 
+                             || main_state == MISS && wr_rdy && lfsr
+                             || main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b00; 
+
+    assign data_bank_4_we    = {4{write_state == WRITE && write_buf_way && write_buf_bank == 2'b00}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b00}} & 4'b1111;
+
+    assign data_bank_4_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b00}} & index
+                             | {8{write_state == WRITE && write_buf_way && write_buf_bank == 2'b00}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_4_wdata = {32{write_state == WRITE && write_buf_way && write_buf_bank == 2'b00}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b00}} & final_ret_data;
+
+    assign data_bank_5_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b01
+                             || write_state == WRITE && write_buf_way && write_buf_bank == 2'b01 
+                             || main_state == MISS && wr_rdy && lfsr
+                             || main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b01; 
+
+    assign data_bank_5_we    = {4{write_state == WRITE && write_buf_way && write_buf_bank == 2'b01}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b01}} & 4'b1111;
+
+    assign data_bank_5_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b01}} & index
+                             | {8{write_state == WRITE && write_buf_way && write_buf_bank == 2'b01}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_5_wdata = {32{write_state == WRITE && write_buf_way && write_buf_bank == 2'b01}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b01}} & final_ret_data;
+
+    assign data_bank_6_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b10
+                             || write_state == WRITE && write_buf_way && write_buf_bank == 2'b10
+                             || main_state == MISS && wr_rdy && lfsr
+                             || main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b10; 
+
+    assign data_bank_6_we    = {4{write_state == WRITE && write_buf_way && write_buf_bank == 2'b10}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b10}} & 4'b1111;
+
+    assign data_bank_6_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b10}} & index
+                             | {8{write_state == WRITE && write_buf_way && write_buf_bank == 2'b10}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_6_wdata = {32{write_state == WRITE && write_buf_way && write_buf_bank == 2'b10}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b10}} & final_ret_data;
+
+    assign data_bank_7_en    = (main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b11
+                             || write_state == WRITE && write_buf_way && write_buf_bank == 2'b11 
+                             || main_state == MISS && wr_rdy && lfsr
+                             || main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b11; 
+
+    assign data_bank_7_we    = {4{write_state == WRITE && write_buf_way && write_buf_bank == 2'b11}} & write_buf_wstrb
+                             | {4{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b11}} & 4'b1111;
+
+    assign data_bank_7_index = {8{(main_state == LOOKUP || main_state == IDLE) && !req_stall && offset[3:2] == 2'b11}} & index
+                             | {8{write_state == WRITE && write_buf_way && write_buf_bank == 2'b11}} & write_buf_index
+                             | {8{main_state == MISS || main_state == REFILL}} & lookup_index;
+            
+    assign data_bank_7_wdata = {32{write_state == WRITE && write_buf_way && write_buf_bank == 2'b11}} & write_buf_wdata
+                             | {32{main_state == REFILL && ret_valid && miss_buf_way && miss_buf_num == 2'b11}} & final_ret_data;
 
 endmodule

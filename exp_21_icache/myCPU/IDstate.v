@@ -31,7 +31,7 @@ module IDstate(
     // input      [52:0] wb_fwd_all,  // {{wb_csr_wr,wb_csr_wr_num},wb_rf_we, wb_rf_waddr, wb_rf_wdata} csr not included
 
     input      [39:0] exe_fwd_all,//{exe_res_from_csr, exe_res_from_mem, exe_rf_we, exe_rf_waddr, exe_alu_result}
-    input      [38:0] mem_fwd_all, //{mem_res_from_csr, mem_rf_we,mem_rf_waddr, mem_rf_wdata}
+    input      [39:0] mem_fwd_all, //{mem_res_from_csr, mem_rf_we,mem_rf_waddr, mem_rf_wdata}
     input      [37:0] wb_fwd_all,//{wb_rf_we,wb_rf_waddr,wb_rf_wdata}
 
     input             exe_valid,

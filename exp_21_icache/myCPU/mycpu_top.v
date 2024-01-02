@@ -414,7 +414,7 @@ module mycpu_top (
 	assign arid = {3'b0,selecter[1]};
 	assign araddr = {32{selecter[0]}} & inst_addr_r | {32{selecter[1]}} & data_addr_r;
 	assign arlen = {8{selecter[0]}} & 8'b11;
-	assign arsize = 3'b0;
+	assign arsize = 3'b10;
 	assign arburst = 2'b1;
 	assign arlock = 0;
 	assign arcache = 0;
@@ -467,7 +467,7 @@ module mycpu_top (
 	assign icache_ret_last = rlast & (rid == 0);
 
 	//useless
-	assign icache_wr_rdy     = 1'b0;
+	assign icache_wr_rdy     = 1'b1;
 
 /*
  * CPU: instanciation (cpu_core::in/out)
@@ -504,7 +504,7 @@ module mycpu_top (
 	);
 	cache icache(
 		.clk					(aclk),
-		.resetn					(aresetn),
+		.reset					(~aresetn),
 
 		.valid					(cpu_inst_sram_req),
 		.op						(cpu_inst_sram_wr),

@@ -48,7 +48,7 @@ module mycpu_core(
     wire [5 :0] id_rf_all;
     // wire [5 :0] exe_rf_all;
     wire [53:0] exe_fwd_all;
-    wire [53:0] mem_rf_all;
+    wire [39:0] mem_rf_all;
     wire [52:0] wb_rf_all;
 
     wire        id_res_from_mem;

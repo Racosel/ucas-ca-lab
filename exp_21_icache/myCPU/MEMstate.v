@@ -16,7 +16,7 @@ module MEMstate(
     // memstate -> wbstate
     input              wb_allowin,
     // output      [53:0] mem_rf_all, // {mem_rf_we, mem_rf_waddr, mem_rf_wdata} if is ld, can't use data directly
-    output      [38:0] mem_rf_all,
+    output      [39:0] mem_rf_all,
     output             mem_to_wb_valid,
     output reg  [31:0] mem_pc,
 
@@ -78,7 +78,7 @@ localparam  CSR_CRMD                = 14'h0,
     assign mem_allowin      = ~mem_valid | mem_ready_go & wb_allowin | cancel_exc_ertn_tlbflush | mem_gone;     
     assign mem_to_wb_valid  = mem_valid & mem_ready_go;
     assign mem_rf_wdata     = mem_res_from_mem ? mem_result : alu_result;
-    assign mem_rf_all       = {mem_res_from_csr,mem_ld_not_handled ,mem_rf_we, mem_rf_waddr, mem_rf_wdata} & {54{mem_valid}};
+    assign mem_rf_all       = {mem_res_from_csr,mem_ld_not_handled ,mem_rf_we, mem_rf_waddr, mem_rf_wdata} & {40{mem_valid}};
     always @(posedge clk) begin
         if(~resetn | cancel_exc_ertn_tlbflush)
             mem_valid <= 1'b0;
